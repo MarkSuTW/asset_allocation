@@ -1,0 +1,2215 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Family Office 資產戰情儀表板</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+      :root {
+        --bg-0: #05070d;
+        --bg-1: #0a1020;
+        --bg-2: #111a2b;
+        --card: rgba(21, 30, 48, 0.78);
+        --line: rgba(143, 160, 187, 0.25);
+        --text-main: #e8f2ff;
+        --text-dim: #9db0c9;
+        --ok: #1fd18a;
+        --warn: #ffc857;
+        --danger: #ff6b6b;
+        --accent-a: #00d0ff;
+        --accent-b: #4f7dff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        color: var(--text-main);
+        font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+        background:
+          radial-gradient(circle at 10% 12%, rgba(0, 208, 255, 0.18), transparent 34%),
+          radial-gradient(circle at 86% 20%, rgba(79, 125, 255, 0.2), transparent 28%),
+          linear-gradient(150deg, var(--bg-0), var(--bg-1) 50%, #081429);
+        min-height: 100vh;
+      }
+
+      .grid-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background-image:
+          linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        background-size: 36px 36px;
+        mask-image: radial-gradient(circle at center, black 32%, transparent 82%);
+        z-index: 0;
+      }
+
+      #app {
+        position: relative;
+        z-index: 1;
+        padding: 1.2rem;
+      }
+
+      .glass {
+        background: var(--card);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+      }
+
+      .glass-light {
+        background: rgba(21, 30, 48, 0.5);
+        backdrop-filter: blur(4px);
+        border: 1px solid rgba(143, 160, 187, 0.15);
+        border-radius: 12px;
+      }
+
+      .kpi-card {
+        padding: 1rem 1rem 0.9rem;
+        min-height: 115px;
+        animation: rise-in 0.5s ease forwards;
+        opacity: 0;
+      }
+
+      .kpi-card .label {
+        font-size: 0.86rem;
+        color: var(--text-dim);
+        margin-bottom: 0.35rem;
+      }
+
+      .kpi-card .value {
+        font-size: 1.45rem;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+      }
+
+      .danger-text {
+        color: var(--danger) !important;
+        text-shadow: 0 0 12px rgba(255, 107, 107, 0.33);
+      }
+
+      .chart-wrap {
+        height: 330px;
+        padding: 1rem;
+      }
+
+      .chart-title {
+        margin-bottom: 0.4rem;
+        font-weight: 600;
+      }
+
+      .table-shell {
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .table-scroll {
+        overflow-y: auto;
+        overflow-x: auto;
+        max-height: 60vh;
+        position: relative;
+      }
+
+      .table-scroll::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      .table-scroll::-webkit-scrollbar-track {
+        background: rgba(143, 160, 187, 0.1);
+        border-radius: 4px;
+      }
+
+      .table-scroll::-webkit-scrollbar-thumb {
+        background: rgba(79, 125, 255, 0.4);
+        border-radius: 4px;
+      }
+
+      .table-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(79, 125, 255, 0.6);
+      }
+
+      .table {
+        --bs-table-bg: transparent;
+        --bs-table-color: var(--text-main);
+        --bs-table-border-color: var(--line);
+        margin-bottom: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+
+      .table thead {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+
+      .table thead th {
+        color: var(--text-dim);
+        font-weight: 500;
+        border-bottom-width: 1px;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 0.8rem;
+        position: relative;
+        white-space: nowrap;
+      }
+
+      .table tbody tr:hover {
+        background: rgba(79, 125, 255, 0.15) !important;
+        color: var(--text-main) !important;
+      }
+
+      .table tbody tr:hover td {
+        color: var(--text-main) !important;
+      }
+
+      .badge-soft {
+        border: 1px solid var(--line);
+        color: var(--text-main);
+      }
+
+      .btn-neon {
+        border: 1px solid rgba(0, 208, 255, 0.45);
+        color: #d8f9ff;
+        background: linear-gradient(120deg, rgba(0, 208, 255, 0.2), rgba(79, 125, 255, 0.24));
+      }
+
+      .btn-neon:hover {
+        color: #ffffff;
+        border-color: rgba(0, 208, 255, 0.7);
+        background: linear-gradient(120deg, rgba(0, 208, 255, 0.35), rgba(79, 125, 255, 0.35));
+      }
+
+      .nav-tabs {
+        border-bottom: 1px solid var(--line);
+      }
+
+      .nav-tabs .nav-link {
+        color: var(--text-dim);
+        border: none;
+        border-bottom: 2px solid transparent;
+      }
+
+      .nav-tabs .nav-link:hover {
+        color: var(--accent-a);
+        border-bottom-color: rgba(0, 208, 255, 0.3);
+      }
+
+      .nav-tabs .nav-link.active {
+        color: var(--accent-a);
+        border-bottom-color: var(--accent-a);
+        background: transparent;
+      }
+
+      .filter-row {
+        display: flex;
+        gap: 0.8rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .filter-group label {
+        color: var(--text-dim);
+        margin: 0;
+        white-space: nowrap;
+        font-size: 0.9rem;
+      }
+
+      .filter-group input,
+      .filter-group select {
+        max-width: 150px;
+      }
+
+      .stock-filter-select {
+        min-width: 260px;
+        max-width: 360px !important;
+      }
+
+      .chat-modal {
+        background: var(--card);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--line);
+      }
+
+      .chat-panel {
+        max-height: 70vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .chat-body {
+        overflow-y: auto;
+        flex: 1;
+        padding: 0.9rem;
+      }
+
+      .chat-body::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      .chat-body::-webkit-scrollbar-thumb {
+        background: rgba(79, 125, 255, 0.3);
+        border-radius: 3px;
+      }
+
+      .chat-bubble {
+        border-radius: 14px;
+        padding: 0.6rem 0.75rem;
+        margin-bottom: 0.6rem;
+        font-size: 0.9rem;
+        line-height: 1.4;
+        word-wrap: break-word;
+      }
+
+      .chat-bubble.user {
+        background: rgba(0, 208, 255, 0.16);
+        border: 1px solid rgba(0, 208, 255, 0.3);
+        margin-left: 1.5rem;
+        color: var(--text-main);
+      }
+
+      .chat-bubble.ai {
+        background: rgba(79, 125, 255, 0.14);
+        border: 1px solid rgba(79, 125, 255, 0.35);
+        margin-right: 1.5rem;
+        color: var(--text-main);
+      }
+
+      .status-safe {
+        color: var(--ok);
+      }
+
+      .status-warn {
+        color: var(--warn);
+      }
+
+      .status-danger {
+        color: var(--danger);
+      }
+
+      .form-control,
+      .form-select {
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid var(--line);
+        color: var(--text-main);
+        font-size: 0.9rem;
+      }
+
+      .form-control:focus,
+      .form-select:focus {
+        background: rgba(0, 0, 0, 0.5);
+        border-color: var(--accent-a);
+        color: var(--text-main);
+        box-shadow: 0 0 8px rgba(0, 208, 255, 0.2);
+      }
+
+      .form-label {
+        color: var(--text-dim);
+        font-size: 0.9rem;
+      }
+
+      @keyframes rise-in {
+        from {
+          transform: translateY(14px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+
+      .status-badge {
+        font-size: 0.85rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 6px;
+      }
+
+      .status-badge.buy {
+        background: rgba(255, 107, 107, 0.2);
+        border: 1px solid rgba(255, 107, 107, 0.4);
+        color: var(--danger);
+      }
+
+      .status-badge.sell {
+        background: rgba(31, 209, 138, 0.2);
+        border: 1px solid rgba(31, 209, 138, 0.4);
+        color: var(--ok);
+      }
+
+      .modal {
+        background: rgba(0, 0, 0, 0.7) !important;
+      }
+
+      .modal-backdrop {
+        background: rgba(0, 0, 0, 0.5) !important;
+      }
+
+      .toast-stack {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 2000;
+        min-width: 280px;
+        max-width: min(92vw, 420px);
+      }
+
+      .app-toast {
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        color: var(--text-main);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(6px);
+        padding: 0.75rem 0.9rem;
+        animation: rise-in 0.22s ease forwards;
+      }
+
+      .app-toast.success {
+        background: rgba(31, 209, 138, 0.22);
+        border-color: rgba(31, 209, 138, 0.55);
+      }
+
+      .app-toast.warning {
+        background: rgba(255, 200, 87, 0.2);
+        border-color: rgba(255, 200, 87, 0.5);
+      }
+
+      .app-toast.error {
+        background: rgba(255, 107, 107, 0.22);
+        border-color: rgba(255, 107, 107, 0.55);
+      }
+
+      @media (max-width: 992px) {
+        .chart-wrap {
+          height: 280px;
+        }
+
+        .table-scroll {
+          max-height: 50vh;
+        }
+
+        .filter-row {
+          flex-direction: column;
+        }
+
+        .filter-group {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .filter-group input,
+        .filter-group select {
+          max-width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grid-overlay"></div>
+    <div id="app" class="container-fluid">
+      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <h3 class="mb-0">家族辦公室級資產戰情儀表板</h3>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-light" @click="refreshAll">重新整理</button>
+        </div>
+      </div>
+
+      <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: currentPage === 'overview' }"
+            @click="currentPage = 'overview'"
+          >
+            彙整
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: currentPage === 'transactions' }"
+            @click="currentPage = 'transactions'"
+          >
+            交易明細
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: currentPage === 'loans' }"
+            @click="currentPage = 'loans'"
+          >
+            借貸明細
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: currentPage === 'settings' }"
+            @click="currentPage = 'settings'"
+          >
+            參數設定
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button
+            class="nav-link"
+            :class="{ active: currentPage === 'dividends' }"
+            @click="currentPage = 'dividends'"
+          >
+            股利明細
+          </button>
+        </li>
+      </ul>
+
+      <!-- 彙整頁面 -->
+      <div v-show="currentPage === 'overview'">
+        <div class="row g-3 mb-3">
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.05s">
+            <div class="label">總淨值</div>
+            <div class="value">{{ fmt(summary.net_assets) }}</div>
+          </div>
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.12s">
+            <div class="label">總預估股息</div>
+            <div class="value">{{ fmt(expected.total_expected_dividend) }}</div>
+          </div>
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.19s">
+            <div class="label">總已實現獲利</div>
+            <div class="value">{{ fmt(performanceTotals.realized_profit) }}</div>
+          </div>
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.26s">
+            <div class="label">目前維持率</div>
+            <div class="value" :class="maintainClass">{{ maintenanceLabel }}</div>
+          </div>
+          <div class="col-12 col-xl kpi-card glass" style="animation-delay: 0.33s">
+            <div class="label">應繳利息</div>
+            <div class="value danger-text">{{ fmt(loans.total_accrued_interest) }}</div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-lg-4">
+            <div class="glass chart-wrap">
+              <div class="chart-title">資產種類佔比</div>
+              <canvas id="assetTypeChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="glass chart-wrap">
+              <div class="chart-title">產業板塊佔比</div>
+              <canvas id="sectorChart"></canvas>
+            </div>
+          </div>
+          <div class="col-lg-4">
+            <div class="glass chart-wrap">
+              <div class="chart-title">維持率 Gauge</div>
+              <canvas id="gaugeChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">標的明細</h5>
+                <span class="badge rounded-pill badge-soft">{{ performance.items.length }} 檔</span>
+              </div>
+              <div class="table-scroll">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>代號</th>
+                      <th>中文名稱</th>
+                      <th>市值</th>
+                      <th>未實現</th>
+                      <th>已實現</th>
+                      <th>已領股息</th>
+                      <th>股數</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in performance.items" :key="row.stock_id">
+                      <td>{{ row.stock_id }}</td>
+                      <td>{{ row.chinese_name }}</td>
+                      <td>{{ fmt(row.market_value) }}</td>
+                      <td :class="row.unrealized_profit >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ fmt(row.unrealized_profit) }}
+                      </td>
+                      <td :class="row.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ fmt(row.realized_profit) }}
+                      </td>
+                      <td>{{ fmt(row.dividends_received) }}</td>
+                      <td>{{ row.shares.toLocaleString() }}</td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-light" @click="viewStockDetail(row.stock_id)">
+                          詳情
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 交易明細頁面 -->
+      <div v-show="currentPage === 'transactions'">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">所有交易紀錄</h5>
+                <span class="badge rounded-pill badge-soft">{{ allTransactions.items.length }} 筆</span>
+              </div>
+              
+              <div class="filter-row">
+                <div class="filter-group">
+                  <label>股票代號</label>
+                  <select v-model="txFilter.stock_id" class="form-select stock-filter-select">
+                    <option value="">全部</option>
+                    <option v-for="opt in stockOptions" :key="`filter-${opt.stock_id}`" :value="opt.stock_id">
+                      {{ opt.stock_id }} {{ opt.chinese_name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>開始日期</label>
+                  <input v-model="txFilter.date_from" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <label>結束日期</label>
+                  <input v-model="txFilter.date_to" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <button class="btn btn-sm btn-neon" @click="openAddTxModal">新增交易明細</button>
+                  <button class="btn btn-sm btn-neon" @click="applyTxFilter">篩選</button>
+                  <button class="btn btn-sm btn-outline-light" @click="clearTxFilter">清除</button>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge rounded-pill badge-soft">篩選筆數 {{ filteredTransactions.length }}</span>
+                <span class="badge rounded-pill badge-soft">總手續費 {{ fmt(txSummary.totalFees) }}</span>
+                <span class="badge rounded-pill badge-soft">總交易稅 {{ fmt(txSummary.totalTax) }}</span>
+                <span class="badge rounded-pill badge-soft">實現損益總計 {{ fmt(txSummary.totalRealized) }}</span>
+                <span class="badge rounded-pill badge-soft">未實現損益總計 {{ fmt(txSummary.totalUnrealized) }}</span>
+                <span class="badge rounded-pill badge-soft">目前庫存股數 {{ txSummary.endingInventory.toLocaleString() }}</span>
+              </div>
+
+              <div class="table-scroll">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>證券</th>
+                      <th>動作</th>
+                      <th>股數</th>
+                      <th>單價</th>
+                      <th>市價</th>
+                      <th>手續費</th>
+                      <th>交易稅</th>
+                      <th>實現損益</th>
+                      <th>未實現損益</th>
+                      <th>報酬率</th>
+                      <th>交易後庫存</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="tx in filteredTransactions" :key="tx.id">
+                      <td>{{ tx.date }}</td>
+                      <td>
+                        <div>{{ tx.stock_id }}</div>
+                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ tx.chinese_name }}</div>
+                      </td>
+                      <td>
+                        <span :class="['status-badge', tx.action]">{{ tx.action_label || actionLabel(tx.action) }}</span>
+                      </td>
+                      <td>{{ tx.shares.toLocaleString() }}</td>
+                      <td>{{ fmtPrice(tx.price) }}</td>
+                      <td>{{ fmtPrice(tx.current_price) }}</td>
+                      <td>{{ fmt(tx.fees) }}</td>
+                      <td>{{ fmt(tx.transaction_tax) }}</td>
+                      <td :class="tx.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ fmt(tx.realized_profit) }}
+                      </td>
+                      <td :class="(tx.unrealized_profit_tx || 0) >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ tx.unrealized_profit_tx === null ? '-' : fmt(tx.unrealized_profit_tx) }}
+                      </td>
+                      <td>
+                        {{ tx.return_rate_tx === null ? '-' : `${tx.return_rate_tx.toFixed(2)}%` }}
+                      </td>
+                      <td>{{ tx.inventory_after.toLocaleString() }}</td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-light me-1" @click="editTransaction(tx)">編輯</button>
+                        <button class="btn btn-sm btn-outline-danger" @click="deleteTransaction(tx.id)">刪除</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 參數設定頁面 -->
+      <div v-show="currentPage === 'settings'">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">交易參數設定</h5>
+                <span class="badge rounded-pill badge-soft">稅率設定</span>
+              </div>
+
+              <div class="glass-light p-3">
+                <div class="row g-2 align-items-end">
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">股票買進稅率 (%)</label>
+                    <input v-model.number="taxSettings.stock_buy_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">股票賣出稅率 (%)</label>
+                    <input v-model.number="taxSettings.stock_sell_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">ETF買進稅率 (%)</label>
+                    <input v-model.number="taxSettings.etf_buy_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">ETF賣出稅率 (%)</label>
+                    <input v-model.number="taxSettings.etf_sell_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">債券買進稅率 (%)</label>
+                    <input v-model.number="taxSettings.bond_buy_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">債券賣出稅率 (%)</label>
+                    <input v-model.number="taxSettings.bond_sell_tax_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-3">
+                  <button class="btn btn-outline-light" @click="saveTaxSettings" :disabled="taxSettingsSaving">
+                    {{ taxSettingsSaving ? '儲存中...' : '儲存交易稅設定' }}
+                  </button>
+                </div>
+
+                <hr style="border-color: var(--line)" />
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                  <div>
+                    <div class="fw-semibold">資料修復工具</div>
+                    <div style="font-size: 0.82rem; color: var(--text-dim)">
+                      當 stock_info 被誤刪除時，可一鍵補回交易與股利中出現的證券代號。
+                    </div>
+                  </div>
+                  <button class="btn btn-outline-warning" @click="repairStockInfo" :disabled="repairStockInfoLoading">
+                    {{ repairStockInfoLoading ? '修復中...' : '一鍵修復 stock_info' }}
+                  </button>
+                  <button class="btn btn-outline-secondary" @click="openMissingPriceModal" :disabled="missingPriceLoading">
+                    {{ missingPriceLoading ? '讀取中...' : '僅顯示無市價清單' }}
+                  </button>
+                  <button class="btn btn-outline-danger" @click="refreshMissingPriceList" :disabled="missingPriceRefreshLoading">
+                    {{ missingPriceRefreshLoading ? '重抓中...' : '手動重抓缺價' }}
+                  </button>
+                  <button class="btn btn-outline-info" @click="showSyncDetailModal = true">
+                    同步來源明細
+                  </button>
+                </div>
+                <div v-if="repairStockInfoMessage" class="mt-2 small" style="color: var(--text-dim)">
+                  {{ repairStockInfoMessage }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 股利明細頁面 -->
+      <div v-show="currentPage === 'dividends'">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">現金股利明細</h5>
+                <span class="badge rounded-pill badge-soft">{{ filteredDividends.length }} 筆</span>
+              </div>
+
+              <div class="filter-row">
+                <div class="filter-group">
+                  <label>股票代號</label>
+                  <select v-model="dividendFilter.stock_id" class="form-select stock-filter-select">
+                    <option value="">全部</option>
+                    <option v-for="opt in stockOptions" :key="`div-filter-${opt.stock_id}`" :value="opt.stock_id">
+                      {{ opt.stock_id }} {{ opt.chinese_name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="filter-group">
+                  <label>開始日期</label>
+                  <input v-model="dividendFilter.date_from" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <label>結束日期</label>
+                  <input v-model="dividendFilter.date_to" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <button class="btn btn-sm btn-neon" @click="showAddDividendModal = true">新增現金股利</button>
+                  <button class="btn btn-sm btn-neon" @click="showAddStockDividendModal = true">新增股票股利</button>
+                  <button class="btn btn-sm btn-outline-light" @click="clearDividendFilter">清除</button>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge rounded-pill badge-soft">篩選金額總計 {{ fmt(dividendSummary.totalCash) }}</span>
+                <span class="badge rounded-pill badge-soft">篩選股數總計 {{ dividendSummary.totalShares.toLocaleString() }}</span>
+              </div>
+
+              <div class="table-scroll">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>證券</th>
+                      <th>除息日</th>
+                      <th>發放日</th>
+                      <th>每股配息</th>
+                      <th>基準持股</th>
+                      <th>現金股利</th>
+                      <th>來源</th>
+                      <th>備註</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in filteredDividends" :key="row.id">
+                      <td>
+                        <div>{{ row.stock_id }}</div>
+                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                      </td>
+                      <td>{{ row.ex_date }}</td>
+                      <td>{{ row.pay_date }}</td>
+                      <td>{{ fmtPrice(row.amount_per_share) }}</td>
+                      <td>{{ row.holding_shares.toLocaleString() }}</td>
+                      <td>{{ fmt(row.cash_amount) }}</td>
+                      <td>{{ row.source }}</td>
+                      <td>{{ row.note }}</td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-danger" @click="deleteDividend(row.id)">刪除</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">股票股利明細</h5>
+                <span class="badge rounded-pill badge-soft">{{ filteredStockDividends.length }} 筆</span>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge rounded-pill badge-soft">篩選配股總計 {{ filteredStockDividendSummary.totalBonus.toLocaleString() }}</span>
+                <span class="badge rounded-pill badge-soft">篩選基準股數 {{ filteredStockDividendSummary.totalBaseShares.toLocaleString() }}</span>
+              </div>
+
+              <div class="table-scroll">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>證券</th>
+                      <th>除權日</th>
+                      <th>入帳日</th>
+                      <th>配股比率</th>
+                      <th>基準持股</th>
+                      <th>配發股數</th>
+                      <th>來源</th>
+                      <th>備註</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in filteredStockDividends" :key="`stock-div-${row.id}`">
+                      <td>
+                        <div>{{ row.stock_id }}</div>
+                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                      </td>
+                      <td>{{ row.ex_date }}</td>
+                      <td>{{ row.allot_date }}</td>
+                      <td>{{ row.ratio }}</td>
+                      <td>{{ row.holding_shares.toLocaleString() }}</td>
+                      <td>{{ row.bonus_shares.toLocaleString() }}</td>
+                      <td>{{ row.source }}</td>
+                      <td>{{ row.note }}</td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-danger" @click="deleteStockDividend(row.id)">刪除</button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 借貸明細頁面 -->
+      <div v-show="currentPage === 'loans'">
+        <div class="row g-3">
+          <div class="col-12">
+            <div class="glass table-shell">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0">元大證金借貸明細</h5>
+                <span class="badge rounded-pill badge-soft">{{ loansList.items.length }} 筆</span>
+              </div>
+
+              <div class="filter-row">
+                <div class="filter-group">
+                  <label>借款機構</label>
+                  <input v-model.trim="loanFilter.lender" type="text" class="form-control" placeholder="元大證金" />
+                </div>
+                <div class="filter-group">
+                  <label>開始日期</label>
+                  <input v-model="loanFilter.date_from" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <label>結束日期</label>
+                  <input v-model="loanFilter.date_to" type="date" class="form-control" />
+                </div>
+                <div class="filter-group">
+                  <button class="btn btn-sm btn-neon" @click="applyLoanFilter">篩選</button>
+                  <button class="btn btn-sm btn-outline-light" @click="clearLoanFilter">清除</button>
+                </div>
+              </div>
+
+              <div class="table-scroll">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>借款機構</th>
+                      <th>擔保品</th>
+                      <th>借款本金</th>
+                      <th>利率</th>
+                      <th>起息日</th>
+                      <th>經過天數</th>
+                      <th>應繳利息</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="loan in filteredLoans" :key="loan.id">
+                      <td>{{ loan.lender }}</td>
+                      <td>{{ loan.collateral }}</td>
+                      <td>{{ fmt(loan.principal) }}</td>
+                      <td>{{ (loan.interest_rate * 100).toFixed(2) }}%</td>
+                      <td>{{ loan.start_date }}</td>
+                      <td>{{ loan.elapsed_days }}</td>
+                      <td>{{ fmt(loan.accrued_interest) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 單檔股票詳情Modal -->
+      <div v-if="showStockModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">{{ selectedStock.stock_id }} {{ selectedStock.chinese_name }} 詳細資訊</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showStockModal = false"></button>
+            </div>
+            <div class="modal-body" v-if="selectedStock">
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">資產類型</div>
+                    <div style="font-weight: 600">{{ selectedStock.asset_type }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">產業</div>
+                    <div style="font-weight: 600">{{ selectedStock.sector }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">庫存股數</div>
+                    <div style="font-weight: 600">{{ selectedStock.shares.toLocaleString() }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">市價</div>
+                    <div style="font-weight: 600">{{ fmtPrice(selectedStock.current_price) }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">市值</div>
+                    <div style="font-weight: 600">{{ fmt(selectedStock.market_value) }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">未實現損益</div>
+                    <div :class="selectedStock.unrealized_profit >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                      {{ fmt(selectedStock.unrealized_profit) }}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">已實現損益</div>
+                    <div :class="selectedStock.realized_profit >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                      {{ fmt(selectedStock.realized_profit) }}
+                    </div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">已領股息</div>
+                    <div style="font-weight: 600">{{ fmt(selectedStock.dividends_received) }}</div>
+                  </div>
+                </div>
+              </div>
+
+              <h6 class="mb-2">交易紀錄</h6>
+              <div class="table-scroll" style="max-height: 300px">
+                <table class="table table-sm table-hover">
+                  <thead>
+                    <tr>
+                      <th>日期</th>
+                      <th>動作</th>
+                      <th>股數</th>
+                      <th>單價</th>
+                      <th>手續費</th>
+                      <th>交易稅</th>
+                      <th>已實現</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="tx in selectedStock.transactions" :key="tx.id">
+                      <td>{{ tx.date }}</td>
+                      <td>
+                        <span :class="['status-badge', tx.action]">{{ tx.action_label || actionLabel(tx.action) }}</span>
+                      </td>
+                      <td>{{ tx.shares }}</td>
+                      <td>{{ fmtPrice(tx.price) }}</td>
+                      <td>{{ fmt(tx.fees) }}</td>
+                      <td>{{ fmt(tx.transaction_tax) }}</td>
+                      <td :class="tx.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ fmt(tx.realized_profit) }}
+                      </td>
+                      <td>
+                        <button class="btn btn-xs btn-outline-light me-1" style="padding: 0.2rem 0.4rem; font-size: 0.75rem" @click="editTransaction(tx)">
+                          編
+                        </button>
+                        <button class="btn btn-xs btn-outline-danger" style="padding: 0.2rem 0.4rem; font-size: 0.75rem" @click="deleteTransaction(tx.id)">
+                          刪
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增/編輯交易Modal -->
+      <div v-if="showAddTxModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">{{ editingTxId ? '編輯' : '新增' }}交易</h5>
+              <button type="button" class="btn-close btn-close-white" @click="closeAddTxModal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-md-6">
+                  <label class="form-label">日期</label>
+                  <input v-model="txForm.date" type="date" class="form-control" />
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label">標的</label>
+                  <input
+                    v-model.trim="txForm.stock_id"
+                    class="form-control"
+                    placeholder="手動輸入證券代號，例如 2330 或 00403A"
+                    @blur="onStockChange"
+                  />
+                  <div v-if="txForm.stock_id" style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.3rem">
+                    {{ selectedStockName || txForm.stock_id }}
+                  </div>
+                  <div v-if="stockQuoteLoading" style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.15rem">
+                    讀取最新收盤價中...
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">動作</label>
+                  <select v-model="txForm.action" class="form-select">
+                    <option value="buy">買</option>
+                    <option value="sell">賣</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">股數</label>
+                  <input v-model.number="txForm.shares" type="number" min="0" step="0.01" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">單價</label>
+                  <input v-model.number="txForm.price" type="number" min="0" step="0.01" class="form-control" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label">手續費</label>
+                  <div class="d-flex gap-2 mb-2">
+                    <select v-model="txForm.fee_mode" class="form-select" style="max-width: 230px">
+                      <option value="auto">系統計算</option>
+                      <option value="manual">手動輸入</option>
+                    </select>
+                    <select v-model="txForm.is_dca" class="form-select" style="max-width: 230px" :disabled="txForm.fee_mode !== 'auto'">
+                      <option :value="false">一般交易</option>
+                      <option :value="true">定期定額</option>
+                    </select>
+                  </div>
+                  <input
+                    v-model.number="txForm.fees"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    class="form-control"
+                    :readonly="txForm.fee_mode === 'auto'"
+                  />
+                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">
+                    系統規則：一般交易 6 折且最低 20 元；定期定額固定 1 元。手動模式可自行輸入 0。
+                  </div>
+                </div>
+              </div>
+              <div v-if="txError" class="text-danger mt-2 small">{{ txError }}</div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+              <button class="btn btn-outline-light" @click="closeAddTxModal">取消</button>
+              <button class="btn btn-neon" @click="submitTransaction">{{ editingTxId ? '更新' : '新增' }}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增現金股利 Modal -->
+      <div v-if="showAddDividendModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">新增現金股利</h5>
+              <button type="button" class="btn-close btn-close-white" @click="closeAddDividendModal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">證券代號</label>
+                  <input v-model.trim="dividendForm.stock_id" class="form-control" placeholder="2330" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">除息日</label>
+                  <input v-model="dividendForm.ex_date" type="date" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">發放日</label>
+                  <input v-model="dividendForm.pay_date" type="date" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">每股配息</label>
+                  <input v-model.number="dividendForm.amount_per_share" type="number" min="0" step="0.0001" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">基準持股（留空自動計算）</label>
+                  <input v-model.number="dividendForm.holding_shares" type="number" min="0" step="0.0001" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">來源</label>
+                  <input v-model.trim="dividendForm.source" class="form-control" placeholder="manual" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label">備註</label>
+                  <input v-model.trim="dividendForm.note" class="form-control" placeholder="可留空" />
+                </div>
+              </div>
+              <div v-if="dividendError" class="text-danger mt-2 small">{{ dividendError }}</div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+              <button class="btn btn-outline-light" @click="closeAddDividendModal">取消</button>
+              <button class="btn btn-neon" @click="submitDividend">新增</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增股票股利 Modal -->
+      <div v-if="showAddStockDividendModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">新增股票股利</h5>
+              <button type="button" class="btn-close btn-close-white" @click="closeAddStockDividendModal"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">證券代號</label>
+                  <input v-model.trim="stockDividendForm.stock_id" class="form-control" placeholder="2330" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">除權日</label>
+                  <input v-model="stockDividendForm.ex_date" type="date" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">入帳日</label>
+                  <input v-model="stockDividendForm.allot_date" type="date" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">配股比率（每 1 股）</label>
+                  <input v-model.number="stockDividendForm.ratio" type="number" min="0" step="0.0001" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">基準持股（留空自動計算）</label>
+                  <input v-model.number="stockDividendForm.holding_shares" type="number" min="0" step="0.0001" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">配發股數（留空自動計算）</label>
+                  <input v-model.number="stockDividendForm.bonus_shares" type="number" min="0" step="0.0001" class="form-control" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">來源</label>
+                  <input v-model.trim="stockDividendForm.source" class="form-control" placeholder="manual" />
+                </div>
+                <div class="col-12">
+                  <label class="form-label">備註</label>
+                  <input v-model.trim="stockDividendForm.note" class="form-control" placeholder="可留空" />
+                </div>
+              </div>
+              <div v-if="stockDividendError" class="text-danger mt-2 small">{{ stockDividendError }}</div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+              <button class="btn btn-outline-light" @click="closeAddStockDividendModal">取消</button>
+              <button class="btn btn-neon" @click="submitStockDividend">新增</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 同步來源明細 Modal -->
+      <div v-if="showSyncDetailModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">同步來源明細</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showSyncDetailModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge rounded-pill badge-soft">同步日 {{ dividendSyncSummary.last_sync_date || '-' }}</span>
+                <span class="badge rounded-pill badge-soft">處理檔數 {{ dividendSyncSummary.processed_stocks || 0 }}</span>
+                <span class="badge rounded-pill badge-soft">新增現金股利 {{ dividendSyncSummary.inserted_cash_dividends || 0 }}</span>
+                <span class="badge rounded-pill badge-soft">新增股票股利 {{ dividendSyncSummary.inserted_stock_dividends || 0 }}</span>
+              </div>
+              <div class="table-scroll" style="max-height: 55vh">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>股票代號</th>
+                      <th>來源</th>
+                      <th>嘗試代號</th>
+                      <th>抓到現金事件</th>
+                      <th>抓到配股事件</th>
+                      <th>新增現金</th>
+                      <th>新增配股</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in dividendSyncSummary.stock_details || []" :key="`sync-${row.stock_id}`">
+                      <td>{{ row.stock_id }}</td>
+                      <td>{{ row.source }}</td>
+                      <td>{{ (row.attempted_symbols || []).join(', ') }}</td>
+                      <td>{{ row.fetched_cash_events }}</td>
+                      <td>{{ row.fetched_stock_events }}</td>
+                      <td>{{ row.inserted_cash_events }}</td>
+                      <td>{{ row.inserted_stock_events }}</td>
+                    </tr>
+                    <tr v-if="!(dividendSyncSummary.stock_details || []).length">
+                      <td colspan="7" class="text-center" style="color: var(--text-dim)">尚無同步明細</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+              <button class="btn btn-outline-light" @click="showSyncDetailModal = false">關閉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 無市價清單 Modal -->
+      <div v-if="showMissingPriceModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius: 16px">
+            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+              <h5 class="modal-title">無市價清單</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showMissingPriceModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge rounded-pill badge-soft">缺價檔數 {{ missingPriceList.length }}</span>
+              </div>
+              <div class="table-scroll" style="max-height: 55vh">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>股票代號</th>
+                      <th>中文名稱</th>
+                      <th>持有股數</th>
+                      <th>目前市價</th>
+                      <th>最後成交價</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in missingPriceList" :key="`miss-${row.stock_id}`">
+                      <td>{{ row.stock_id }}</td>
+                      <td>{{ row.chinese_name }}</td>
+                      <td>{{ row.shares.toLocaleString() }}</td>
+                      <td>{{ fmtPrice(row.current_price) }}</td>
+                      <td>{{ row.last_trade_price === null ? '-' : fmtPrice(row.last_trade_price) }}</td>
+                    </tr>
+                    <tr v-if="!missingPriceList.length">
+                      <td colspan="5" class="text-center" style="color: var(--text-dim)">目前沒有缺價股票</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+              <button class="btn btn-outline-light" @click="showMissingPriceModal = false">關閉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI 聊天室 Modal -->
+      <div v-if="showChatModal" class="modal fade show d-block">
+        <div class="modal-dialog modal-dialog-scrollable" style="max-width: 450px; margin: 0 auto">
+          <div class="modal-content chat-modal" style="border-radius: 16px">
+            <div class="modal-header d-flex justify-content-between align-items-center">
+              <strong>AI 投資長智庫</strong>
+              <button type="button" class="btn-close btn-close-white" @click="showChatModal = false"></button>
+            </div>
+            <div class="chat-panel">
+              <div class="chat-body" ref="chatBody">
+                <div v-for="(msg, idx) in chatMessages" :key="idx" :class="['chat-bubble', msg.role]">
+                  {{ msg.content }}
+                </div>
+              </div>
+              <div class="modal-footer border-top d-flex gap-2 p-2" style="border-color: var(--line) !important">
+                <input
+                  v-model.trim="chatInput"
+                  @keyup.enter="askAdvisor"
+                  class="form-control form-control-sm"
+                  placeholder="問 AI..."
+                />
+                <button class="btn btn-neon btn-sm" @click="askAdvisor" :disabled="advisorLoading">
+                  {{ advisorLoading ? '...' : '送出' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button v-if="!showChatModal" class="btn btn-neon" style="position: fixed; bottom: 2rem; right: 2rem; z-index: 999; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem" @click="showChatModal = true" title="打開 AI 顧問">
+        💬
+      </button>
+
+      <div class="toast-stack" v-if="toast.show">
+        <div class="app-toast" :class="toast.type">
+          {{ toast.message }}
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      const gaugeCenterTextPlugin = {
+        id: "gaugeCenterText",
+        afterDraw(chart) {
+          if (chart.config.type !== "doughnut") return;
+          if (!chart.config.options.plugins.centerText) return;
+          const { ctx } = chart;
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || !meta.data || !meta.data.length) return;
+          const x = meta.data[0].x;
+          const y = meta.data[0].y + 20;
+          const text = chart.config.options.plugins.centerText.text || "-";
+          ctx.save();
+          ctx.fillStyle = "#e8f2ff";
+          ctx.font = "700 24px 'Segoe UI'";
+          ctx.textAlign = "center";
+          ctx.fillText(text, x, y);
+          ctx.restore();
+        },
+      };
+      Chart.register(gaugeCenterTextPlugin);
+
+      const { createApp, nextTick } = Vue;
+      createApp({
+        data() {
+          return {
+            currentPage: "overview",
+            summary: { total_assets: 0, total_liabilities: 0, net_assets: 0 },
+            performance: { items: [], totals: {} },
+            allocation: { asset_type: [], sector: [] },
+            expected: { items: [], total_expected_dividend: 0 },
+            loans: {
+              maintenance_rate: null,
+              status: "無資料",
+              total_accrued_interest: 0,
+            },
+            allTransactions: { items: [] },
+            loansList: { items: [] },
+            charts: {
+              assetType: null,
+              sector: null,
+              gauge: null,
+            },
+            showAddTxModal: false,
+            showAddDividendModal: false,
+            showAddStockDividendModal: false,
+            showSyncDetailModal: false,
+            showMissingPriceModal: false,
+            showStockModal: false,
+            showChatModal: false,
+            selectedStock: null,
+            txForm: {
+              date: new Date().toISOString().slice(0, 10),
+              stock_id: "",
+              action: "buy",
+              shares: 0,
+              price: 0,
+              fees: 0,
+              fee_mode: "auto",
+              is_dca: false,
+            },
+            txError: "",
+            dividendError: "",
+            stockDividendError: "",
+            editingTxId: null,
+            stockQuoteLoading: false,
+            taxSettingsSaving: false,
+            repairStockInfoLoading: false,
+            repairStockInfoMessage: "",
+            missingPriceLoading: false,
+            missingPriceRefreshLoading: false,
+            missingPriceList: [],
+            dividendSyncSummary: {
+              last_sync_date: "",
+              processed_stocks: 0,
+              inserted_cash_dividends: 0,
+              inserted_stock_dividends: 0,
+              stock_details: [],
+            },
+            toast: {
+              show: false,
+              type: "success",
+              message: "",
+            },
+            toastTimerId: null,
+            taxSettings: {
+              stock_buy_tax_rate_pct: 0,
+              stock_sell_tax_rate_pct: 0.3,
+              etf_buy_tax_rate_pct: 0,
+              etf_sell_tax_rate_pct: 0.1,
+              bond_buy_tax_rate_pct: 0,
+              bond_sell_tax_rate_pct: 0.1,
+            },
+            txFilter: {
+              stock_id: "",
+              date_from: "",
+              date_to: "",
+            },
+            allDividends: { items: [] },
+            allStockDividends: { items: [] },
+            dividendFilter: {
+              stock_id: "",
+              date_from: "",
+              date_to: "",
+            },
+            dividendForm: {
+              stock_id: "",
+              ex_date: new Date().toISOString().slice(0, 10),
+              pay_date: new Date().toISOString().slice(0, 10),
+              amount_per_share: 0,
+              holding_shares: null,
+              source: "manual",
+              note: "",
+            },
+            stockDividendForm: {
+              stock_id: "",
+              ex_date: new Date().toISOString().slice(0, 10),
+              allot_date: new Date().toISOString().slice(0, 10),
+              ratio: 0,
+              holding_shares: null,
+              bonus_shares: null,
+              source: "manual",
+              note: "",
+            },
+            loanFilter: {
+              lender: "",
+              date_from: "",
+              date_to: "",
+            },
+            chatMessages: [
+              { role: "ai", content: "已就緒。可詢問：如何改善資產配置、降低維持率風險、提升現金流。" },
+            ],
+            chatInput: "",
+            advisorLoading: false,
+          };
+        },
+        computed: {
+          performanceTotals() {
+            return {
+              realized_profit: this.performance.totals.realized_profit || 0,
+            };
+          },
+          stockOptions() {
+            const map = new Map();
+
+            for (const row of this.performance.items || []) {
+              if (!row.stock_id) continue;
+              map.set(row.stock_id, {
+                stock_id: row.stock_id,
+                chinese_name: row.chinese_name || row.stock_id,
+              });
+            }
+
+            for (const tx of this.allTransactions.items || []) {
+              if (!tx.stock_id) continue;
+              if (!map.has(tx.stock_id)) {
+                map.set(tx.stock_id, {
+                  stock_id: tx.stock_id,
+                  chinese_name: tx.chinese_name || tx.stock_id,
+                });
+              }
+            }
+
+            return Array.from(map.values()).sort((a, b) => a.stock_id.localeCompare(b.stock_id));
+          },
+          selectedStockName() {
+            if (!this.txForm.stock_id) return "";
+            const hit = this.stockOptions.find((x) => x.stock_id === this.txForm.stock_id);
+            return hit ? hit.chinese_name : "";
+          },
+          maintenanceLabel() {
+            const v = this.loans.maintenance_rate;
+            if (v === null || v === undefined) return "-";
+            return `${v.toFixed(2)}% (${this.loans.status})`;
+          },
+          maintainClass() {
+            const v = this.loans.maintenance_rate;
+            if (v === null || v === undefined) return "";
+            if (v < 130) return "status-danger";
+            if (v < 167) return "status-warn";
+            if (v > 200) return "status-safe";
+            return "";
+          },
+          filteredTransactions() {
+            if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to) {
+              return this.allTransactions.items;
+            }
+            return this.allTransactions.items.filter(tx => {
+              if (this.txFilter.stock_id && tx.stock_id !== this.txFilter.stock_id) return false;
+              if (this.txFilter.date_from && tx.date < this.txFilter.date_from) return false;
+              if (this.txFilter.date_to && tx.date > this.txFilter.date_to) return false;
+              return true;
+            });
+          },
+          filteredLoans() {
+            if (!this.loanFilter.lender && !this.loanFilter.date_from && !this.loanFilter.date_to) {
+              return this.loansList.items;
+            }
+            return this.loansList.items.filter(loan => {
+              if (this.loanFilter.lender && !loan.lender.includes(this.loanFilter.lender)) return false;
+              if (this.loanFilter.date_from && loan.start_date < this.loanFilter.date_from) return false;
+              if (this.loanFilter.date_to && loan.start_date > this.loanFilter.date_to) return false;
+              return true;
+            });
+          },
+          txSummary() {
+            const rows = this.filteredTransactions || [];
+            const totalFees = rows.reduce((acc, x) => acc + Number(x.fees || 0), 0);
+            const totalTax = rows.reduce((acc, x) => acc + Number(x.transaction_tax || 0), 0);
+            const totalRealized = rows.reduce((acc, x) => acc + Number(x.realized_profit || 0), 0);
+            const totalUnrealized = rows.reduce((acc, x) => {
+              if (x.unrealized_profit_tx === null || x.unrealized_profit_tx === undefined) return acc;
+              return acc + Number(x.unrealized_profit_tx || 0);
+            }, 0);
+
+            const latestByStock = new Map();
+            for (const tx of rows) {
+              if (!latestByStock.has(tx.stock_id)) {
+                latestByStock.set(tx.stock_id, tx);
+              }
+            }
+
+            const endingInventory = Array.from(latestByStock.values()).reduce(
+              (acc, tx) => acc + Number(tx.inventory_after || 0),
+              0,
+            );
+
+            return {
+              totalFees,
+              totalTax,
+              totalRealized,
+              totalUnrealized,
+              endingInventory,
+            };
+          },
+          filteredDividends() {
+            const rows = this.allDividends.items || [];
+            return rows.filter((x) => {
+              if (this.dividendFilter.stock_id && x.stock_id !== this.dividendFilter.stock_id) return false;
+              if (this.dividendFilter.date_from && x.pay_date < this.dividendFilter.date_from) return false;
+              if (this.dividendFilter.date_to && x.pay_date > this.dividendFilter.date_to) return false;
+              return true;
+            });
+          },
+          dividendSummary() {
+            const rows = this.filteredDividends || [];
+            return {
+              totalCash: rows.reduce((acc, x) => acc + Number(x.cash_amount || 0), 0),
+              totalShares: rows.reduce((acc, x) => acc + Number(x.holding_shares || 0), 0),
+            };
+          },
+          filteredStockDividends() {
+            const rows = this.allStockDividends.items || [];
+            return rows.filter((x) => {
+              if (this.dividendFilter.stock_id && x.stock_id !== this.dividendFilter.stock_id) return false;
+              if (this.dividendFilter.date_from && x.allot_date < this.dividendFilter.date_from) return false;
+              if (this.dividendFilter.date_to && x.allot_date > this.dividendFilter.date_to) return false;
+              return true;
+            });
+          },
+          filteredStockDividendSummary() {
+            const rows = this.filteredStockDividends || [];
+            return {
+              totalBonus: rows.reduce((acc, x) => acc + Number(x.bonus_shares || 0), 0),
+              totalBaseShares: rows.reduce((acc, x) => acc + Number(x.holding_shares || 0), 0),
+            };
+          },
+        },
+        methods: {
+          actionLabel(action) {
+            return action === "buy" ? "買" : "賣";
+          },
+          normalizeStockId(value) {
+            return String(value || "").trim().toUpperCase();
+          },
+          estimateFee() {
+            if (this.txForm.fee_mode !== "auto") return;
+
+            const amount = Number(this.txForm.shares || 0) * Number(this.txForm.price || 0);
+            if (amount <= 0) {
+              this.txForm.fees = 0;
+              return;
+            }
+
+            if (this.txForm.is_dca) {
+              this.txForm.fees = 1;
+              return;
+            }
+
+            const fee = Math.round(amount * 0.001425 * 0.6);
+            this.txForm.fees = Math.max(fee, 20);
+          },
+          upsertStockOption(stock_id, chinese_name) {
+            if (!stock_id) return;
+
+            const idxPerf = (this.performance.items || []).findIndex((x) => x.stock_id === stock_id);
+            if (idxPerf >= 0) {
+              this.performance.items[idxPerf].chinese_name = chinese_name || stock_id;
+            }
+
+            for (const tx of this.allTransactions.items || []) {
+              if (tx.stock_id === stock_id && chinese_name) {
+                tx.chinese_name = chinese_name;
+              }
+            }
+          },
+          async onStockChange() {
+            this.txForm.stock_id = this.normalizeStockId(this.txForm.stock_id);
+            if (!this.txForm.stock_id) return;
+
+            this.stockQuoteLoading = true;
+            try {
+              const quote = await this.fetchJson(`/api/stock/${this.txForm.stock_id}/quote`);
+              if (quote && Number(quote.close_price || 0) > 0) {
+                this.txForm.price = Number(quote.close_price);
+              }
+              this.upsertStockOption(quote.stock_id, quote.chinese_name);
+            } catch (err) {
+              console.error(err);
+            } finally {
+              this.stockQuoteLoading = false;
+              this.estimateFee();
+            }
+          },
+          fmt(v) {
+            const num = Number(v || 0);
+            return new Intl.NumberFormat("zh-TW", {
+              style: "currency",
+              currency: "TWD",
+              maximumFractionDigits: 0,
+            }).format(num);
+          },
+          fmtPrice(v) {
+            const num = Number(v || 0);
+            return new Intl.NumberFormat("zh-TW", {
+              style: "currency",
+              currency: "TWD",
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }).format(num);
+          },
+          async fetchJson(url, options) {
+            const res = await fetch(url, options);
+            if (!res.ok) {
+              const text = await res.text();
+              throw new Error(text || `HTTP ${res.status}`);
+            }
+            return await res.json();
+          },
+          showToast(message, type = "success", durationMs = 3500) {
+            if (this.toastTimerId) {
+              clearTimeout(this.toastTimerId);
+              this.toastTimerId = null;
+            }
+            this.toast = {
+              show: true,
+              type,
+              message,
+            };
+            this.toastTimerId = setTimeout(() => {
+              this.toast.show = false;
+              this.toastTimerId = null;
+            }, durationMs);
+          },
+          async saveTaxSettings() {
+            this.taxSettingsSaving = true;
+            try {
+              const payload = {
+                stock_buy_tax_rate: Number(this.taxSettings.stock_buy_tax_rate_pct || 0) / 100,
+                stock_sell_tax_rate: Number(this.taxSettings.stock_sell_tax_rate_pct || 0) / 100,
+                etf_buy_tax_rate: Number(this.taxSettings.etf_buy_tax_rate_pct || 0) / 100,
+                etf_sell_tax_rate: Number(this.taxSettings.etf_sell_tax_rate_pct || 0) / 100,
+                bond_buy_tax_rate: Number(this.taxSettings.bond_buy_tax_rate_pct || 0) / 100,
+                bond_sell_tax_rate: Number(this.taxSettings.bond_sell_tax_rate_pct || 0) / 100,
+              };
+              await this.fetchJson("/api/settings/transaction-tax", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              await this.refreshAll();
+            } catch (err) {
+              alert(`交易稅設定更新失敗: ${err.message || err}`);
+            } finally {
+              this.taxSettingsSaving = false;
+            }
+          },
+          async repairStockInfo() {
+            this.repairStockInfoLoading = true;
+            this.repairStockInfoMessage = "";
+            try {
+              const resp = await this.fetchJson("/api/settings/repair-stock-info", {
+                method: "POST",
+              });
+              const repaired = Number(resp.repaired_count || 0);
+              this.repairStockInfoMessage = repaired > 0
+                ? `修復完成，已補回 ${repaired} 筆證券代號。`
+                : "修復完成，目前無需補回資料。";
+              this.showToast(this.repairStockInfoMessage, repaired > 0 ? "success" : "warning");
+              await this.refreshAll();
+            } catch (err) {
+              this.repairStockInfoMessage = `修復失敗: ${err.message || err}`;
+              this.showToast(this.repairStockInfoMessage, "error", 4500);
+            } finally {
+              this.repairStockInfoLoading = false;
+            }
+          },
+          async loadMissingPriceList() {
+            this.missingPriceLoading = true;
+            try {
+              const resp = await this.fetchJson("/api/stock/missing-prices?limit=500");
+              this.missingPriceList = Array.isArray(resp.items) ? resp.items : [];
+            } catch (err) {
+              this.showToast(`讀取無市價清單失敗: ${err.message || err}`, "error", 4500);
+            } finally {
+              this.missingPriceLoading = false;
+            }
+          },
+          async openMissingPriceModal() {
+            this.showMissingPriceModal = true;
+            await this.loadMissingPriceList();
+          },
+          async refreshMissingPriceList() {
+            this.missingPriceRefreshLoading = true;
+            try {
+              const resp = await this.fetchJson("/api/stock/refresh-missing-prices?limit=500", {
+                method: "POST",
+              });
+              this.showToast(`重抓完成：檢查 ${resp.checked || 0} 檔，更新 ${resp.updated || 0} 檔，仍缺價 ${resp.still_missing || 0} 檔。`, "warning", 5000);
+              await this.loadMissingPriceList();
+              await this.refreshAll();
+            } catch (err) {
+              this.showToast(`手動重抓缺價失敗: ${err.message || err}`, "error", 5000);
+            } finally {
+              this.missingPriceRefreshLoading = false;
+            }
+          },
+          openAddTxModal() {
+            this.showAddTxModal = true;
+            this.txError = "";
+            if (this.txFilter.stock_id) {
+              this.txForm.stock_id = this.txFilter.stock_id;
+              this.onStockChange();
+            }
+          },
+          closeAddDividendModal() {
+            this.showAddDividendModal = false;
+            this.dividendError = "";
+            this.dividendForm = {
+              stock_id: "",
+              ex_date: new Date().toISOString().slice(0, 10),
+              pay_date: new Date().toISOString().slice(0, 10),
+              amount_per_share: 0,
+              holding_shares: null,
+              source: "manual",
+              note: "",
+            };
+          },
+          closeAddStockDividendModal() {
+            this.showAddStockDividendModal = false;
+            this.stockDividendError = "";
+            this.stockDividendForm = {
+              stock_id: "",
+              ex_date: new Date().toISOString().slice(0, 10),
+              allot_date: new Date().toISOString().slice(0, 10),
+              ratio: 0,
+              holding_shares: null,
+              bonus_shares: null,
+              source: "manual",
+              note: "",
+            };
+          },
+          clearDividendFilter() {
+            this.dividendFilter = { stock_id: "", date_from: "", date_to: "" };
+          },
+          async submitDividend() {
+            this.dividendError = "";
+            try {
+              const payload = {
+                stock_id: this.normalizeStockId(this.dividendForm.stock_id),
+                ex_date: this.dividendForm.ex_date,
+                pay_date: this.dividendForm.pay_date,
+                amount_per_share: Number(this.dividendForm.amount_per_share || 0),
+                source: this.dividendForm.source || "manual",
+                note: this.dividendForm.note || "",
+              };
+              if (this.dividendForm.holding_shares !== null && this.dividendForm.holding_shares !== "") {
+                payload.holding_shares = Number(this.dividendForm.holding_shares);
+              }
+
+              await this.fetchJson("/api/dividends/cash", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              this.closeAddDividendModal();
+              await this.refreshAll();
+            } catch (err) {
+              this.dividendError = String(err.message || err);
+            }
+          },
+          async deleteDividend(dividend_id) {
+            if (!confirm("確定刪除此筆現金股利？")) return;
+            try {
+              await this.fetchJson(`/api/dividends/cash/${dividend_id}`, { method: "DELETE" });
+              await this.refreshAll();
+            } catch (err) {
+              alert(`刪除失敗: ${err.message || err}`);
+            }
+          },
+          async submitStockDividend() {
+            this.stockDividendError = "";
+            try {
+              const payload = {
+                stock_id: this.normalizeStockId(this.stockDividendForm.stock_id),
+                ex_date: this.stockDividendForm.ex_date,
+                allot_date: this.stockDividendForm.allot_date,
+                ratio: Number(this.stockDividendForm.ratio || 0),
+                source: this.stockDividendForm.source || "manual",
+                note: this.stockDividendForm.note || "",
+              };
+
+              if (this.stockDividendForm.holding_shares !== null && this.stockDividendForm.holding_shares !== "") {
+                payload.holding_shares = Number(this.stockDividendForm.holding_shares);
+              }
+              if (this.stockDividendForm.bonus_shares !== null && this.stockDividendForm.bonus_shares !== "") {
+                payload.bonus_shares = Number(this.stockDividendForm.bonus_shares);
+              }
+
+              await this.fetchJson("/api/dividends/stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              this.closeAddStockDividendModal();
+              await this.refreshAll();
+            } catch (err) {
+              this.stockDividendError = String(err.message || err);
+            }
+          },
+          async deleteStockDividend(dividend_id) {
+            if (!confirm("確定刪除此筆股票股利？")) return;
+            try {
+              await this.fetchJson(`/api/dividends/stock/${dividend_id}`, { method: "DELETE" });
+              await this.refreshAll();
+            } catch (err) {
+              alert(`刪除失敗: ${err.message || err}`);
+            }
+          },
+          async refreshAll() {
+            try {
+              try {
+                const syncResp = await this.fetchJson("/api/dividends/auto-sync", { method: "POST" });
+                this.dividendSyncSummary = {
+                  last_sync_date: syncResp.last_sync_date || "",
+                  processed_stocks: Number(syncResp.processed_stocks || 0),
+                  inserted_cash_dividends: Number(syncResp.inserted_cash_dividends || 0),
+                  inserted_stock_dividends: Number(syncResp.inserted_stock_dividends || 0),
+                  stock_details: Array.isArray(syncResp.stock_details) ? syncResp.stock_details : [],
+                };
+              } catch (syncErr) {
+                console.warn("auto-sync dividends skipped", syncErr);
+              }
+
+              const [summary, performance, allocation, expected, loans, allTx, allLoans, taxSettingsResp, allDividends, allStockDividends] = await Promise.all([
+                this.fetchJson("/api/portfolio/summary"),
+                this.fetchJson("/api/portfolio/performance"),
+                this.fetchJson("/api/portfolio/allocation"),
+                this.fetchJson("/api/portfolio/expected-dividends"),
+                this.fetchJson("/api/loans/health"),
+                this.fetchJson("/api/transactions?limit=5000"),
+                this.fetchJson("/api/loans/list"),
+                this.fetchJson("/api/settings/transaction-tax"),
+                this.fetchJson("/api/dividends/cash?limit=5000"),
+                this.fetchJson("/api/dividends/stock?limit=5000"),
+              ]);
+
+              this.summary = summary;
+              this.performance = performance;
+              this.allocation = allocation;
+              this.expected = expected;
+              this.loans = loans;
+              this.allTransactions = allTx;
+              this.loansList = allLoans;
+              this.allDividends = allDividends;
+              this.allStockDividends = allStockDividends;
+              this.taxSettings = {
+                stock_buy_tax_rate_pct: Number((taxSettingsResp.settings.stock_buy_tax_rate || 0) * 100),
+                stock_sell_tax_rate_pct: Number((taxSettingsResp.settings.stock_sell_tax_rate || 0) * 100),
+                etf_buy_tax_rate_pct: Number((taxSettingsResp.settings.etf_buy_tax_rate || 0) * 100),
+                etf_sell_tax_rate_pct: Number((taxSettingsResp.settings.etf_sell_tax_rate || 0) * 100),
+                bond_buy_tax_rate_pct: Number((taxSettingsResp.settings.bond_buy_tax_rate || 0) * 100),
+                bond_sell_tax_rate_pct: Number((taxSettingsResp.settings.bond_sell_tax_rate || 0) * 100),
+              };
+
+              this.renderCharts();
+            } catch (err) {
+              console.error(err);
+              this.chatMessages.push({ role: "ai", content: "讀取 API 失敗，請確認後端已啟動。" });
+            }
+          },
+          renderCharts() {
+            this.renderAssetTypeChart();
+            this.renderSectorChart();
+            this.renderGaugeChart();
+          },
+          destroyChart(name) {
+            if (this.charts[name]) {
+              this.charts[name].destroy();
+              this.charts[name] = null;
+            }
+          },
+          renderAssetTypeChart() {
+            this.destroyChart("assetType");
+            const el = document.getElementById("assetTypeChart");
+            if (!el) return;
+            const labels = this.allocation.asset_type.map((x) => x.name);
+            const values = this.allocation.asset_type.map((x) => x.value);
+            this.charts.assetType = new Chart(el, {
+              type: "doughnut",
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: values,
+                    backgroundColor: ["#00d0ff", "#4f7dff", "#44e0b2", "#ffc857", "#ff8a5b"],
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { labels: { color: "#dce9fb" } },
+                },
+              },
+            });
+          },
+          renderSectorChart() {
+            this.destroyChart("sector");
+            const el = document.getElementById("sectorChart");
+            if (!el) return;
+            const labels = this.allocation.sector.map((x) => x.name);
+            const values = this.allocation.sector.map((x) => x.value);
+            this.charts.sector = new Chart(el, {
+              type: "doughnut",
+              data: {
+                labels,
+                datasets: [
+                  {
+                    data: values,
+                    backgroundColor: ["#4f7dff", "#00d0ff", "#44e0b2", "#ffc857", "#ff6b6b", "#8f65ff", "#7fe6ff"],
+                    borderWidth: 0,
+                  },
+                ],
+              },
+              options: {
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { labels: { color: "#dce9fb" } },
+                },
+              },
+            });
+          },
+          renderGaugeChart() {
+            this.destroyChart("gauge");
+            const el = document.getElementById("gaugeChart");
+            if (!el) return;
+            const v = Math.max(0, Math.min(this.loans.maintenance_rate || 0, 260));
+            const remain = Math.max(260 - v, 0);
+            this.charts.gauge = new Chart(el, {
+              type: "doughnut",
+              data: {
+                labels: ["危險", "警戒", "安全", "剩餘"],
+                datasets: [
+                  {
+                    data: [130, 36, 94, remain],
+                    backgroundColor: ["#ff6b6b", "#ffc857", "#1fd18a", "rgba(157,176,201,0.12)"],
+                    borderWidth: 0,
+                    circumference: 180,
+                    rotation: 270,
+                    cutout: "72%",
+                  },
+                  {
+                    data: [v, Math.max(260 - v, 0)],
+                    backgroundColor: ["#e8f2ff", "rgba(0,0,0,0)"],
+                    borderWidth: 0,
+                    circumference: 180,
+                    rotation: 270,
+                    cutout: "88%",
+                  },
+                ],
+              },
+              options: {
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: false },
+                  centerText: {
+                    text: `${(this.loans.maintenance_rate || 0).toFixed(1)}%`,
+                  },
+                },
+              },
+            });
+          },
+          viewStockDetail(stock_id) {
+            this.fetchJson(`/api/stock/${stock_id}/detail`).then((data) => {
+              this.selectedStock = data;
+              this.showStockModal = true;
+            });
+          },
+          editTransaction(tx) {
+            this.editingTxId = tx.id;
+            this.txForm = {
+              date: tx.date,
+              stock_id: tx.stock_id,
+              action: tx.action,
+              shares: tx.shares,
+              price: tx.price,
+              fees: tx.fees,
+              fee_mode: "manual",
+              is_dca: false,
+            };
+            this.showAddTxModal = true;
+          },
+          closeAddTxModal() {
+            this.showAddTxModal = false;
+            this.editingTxId = null;
+            this.txError = "";
+            this.txForm = {
+              date: new Date().toISOString().slice(0, 10),
+              stock_id: "",
+              action: "buy",
+              shares: 0,
+              price: 0,
+              fees: 0,
+              fee_mode: "auto",
+              is_dca: false,
+            };
+          },
+          async submitTransaction() {
+            this.txError = "";
+            try {
+              this.txForm.stock_id = this.normalizeStockId(this.txForm.stock_id);
+              if (this.txForm.fee_mode === "auto") {
+                this.estimateFee();
+              }
+
+              if (!this.txForm.stock_id) {
+                this.txError = "請先選擇證券代號";
+                return;
+              }
+
+              const payload = {
+                date: this.txForm.date,
+                stock_id: this.txForm.stock_id,
+                action: this.txForm.action,
+                shares: this.txForm.shares,
+                price: this.txForm.price,
+                fees: this.txForm.fees,
+              };
+
+              if (this.editingTxId) {
+                await this.fetchJson(`/api/transactions/${this.editingTxId}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                });
+              } else {
+                await this.fetchJson("/api/transactions", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(payload),
+                });
+              }
+              this.closeAddTxModal();
+              await this.refreshAll();
+            } catch (err) {
+              this.txError = String(err.message || err);
+            }
+          },
+          async deleteTransaction(tx_id) {
+            if (!confirm("確定刪除此交易？")) return;
+            try {
+              await this.fetchJson(`/api/transactions/${tx_id}`, { method: "DELETE" });
+              await this.refreshAll();
+            } catch (err) {
+              alert(`刪除失敗: ${err.message}`);
+            }
+          },
+          applyTxFilter() {
+            // Just trigger the computed property update
+          },
+          clearTxFilter() {
+            this.txFilter = { stock_id: "", date_from: "", date_to: "" };
+          },
+          applyLoanFilter() {
+            // Just trigger the computed property update
+          },
+          clearLoanFilter() {
+            this.loanFilter = { lender: "", date_from: "", date_to: "" };
+          },
+          async askAdvisor() {
+            if (!this.chatInput || this.advisorLoading) return;
+            const q = this.chatInput;
+            this.chatInput = "";
+            this.chatMessages.push({ role: "user", content: q });
+            this.advisorLoading = true;
+            try {
+              const res = await this.fetchJson("/api/ai/advisor", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ question: q }),
+              });
+              this.chatMessages.push({ role: "ai", content: `[${res.source}]\n${res.answer}` });
+            } catch (err) {
+              this.chatMessages.push({ role: "ai", content: `AI 服務失敗：${err.message || err}` });
+            } finally {
+              this.advisorLoading = false;
+              await nextTick();
+              if (this.$refs.chatBody) {
+                this.$refs.chatBody.scrollTop = this.$refs.chatBody.scrollHeight;
+              }
+            }
+          },
+        },
+        watch: {
+          "txForm.shares"() {
+            this.estimateFee();
+          },
+          "txForm.price"() {
+            this.estimateFee();
+          },
+          "txForm.fee_mode"() {
+            this.estimateFee();
+          },
+          "txForm.is_dca"() {
+            this.estimateFee();
+          },
+        },
+        mounted() {
+          this.refreshAll();
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

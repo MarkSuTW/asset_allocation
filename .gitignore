@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local database
+wealth.db
+
+# Environment files
+.env
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/*.log
