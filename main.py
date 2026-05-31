@@ -1,5 +1,6 @@
 import json
 import html
+import math
 import os
 import re
 import ssl
@@ -224,7 +225,13 @@ def calculate_transaction_tax(
     return round(tax, 2)
 
 
-def get_shares_on_date(conn: sqlite3.Connection, stock_id: str, on_date: str) -> float:
+def get_shares_on_date(
+    conn: sqlite3.Connection,
+    stock_id: str,
+    on_date: str,
+    stock_dividend_before_tx: bool = True,
+    exclude_stock_dividend_id: Optional[int] = None,
+) -> float:
     sid = normalize_stock_id(stock_id)
     d = normalize_date(on_date)
     tx_rows = conn.execute(
@@ -240,8 +247,12 @@ def get_shares_on_date(conn: sqlite3.Connection, stock_id: str, on_date: str) ->
     for r in tx_rows:
         events.append({"kind": "tx", "date": r["date"], "id": int(r["id"]), "row": r})
     for r in div_rows:
+        if exclude_stock_dividend_id is not None and int(r["id"]) == int(exclude_stock_dividend_id):
+            continue
         events.append({"kind": "stock_div", "date": r["allot_date"], "id": int(r["id"]), "row": r})
-    events.sort(key=lambda e: (e["date"], 0 if e["kind"] == "stock_div" else 1, e["id"]))
+    div_priority = 0 if stock_dividend_before_tx else 1
+    tx_priority = 1 if stock_dividend_before_tx else 0
+    events.sort(key=lambda e: (e["date"], div_priority if e["kind"] == "stock_div" else tx_priority, e["id"]))
 
     inventory = 0.0
     for event in events:
@@ -259,6 +270,16 @@ def get_shares_on_date(conn: sqlite3.Connection, stock_id: str, on_date: str) ->
             inventory = max(inventory - shares, 0.0)
 
     return max(inventory, 0.0)
+
+
+def compute_stock_event_settlement(holding_shares: float, ratio: float) -> Dict[str, float]:
+    # Taiwan stock dividends are typically allocated by whole-lot (1000 shares) entitlement;
+    # capital reduction events still apply to all shares.
+    base_shares = float(holding_shares)
+    if ratio > 0:
+        base_shares = float(math.floor(max(holding_shares, 0.0) / 1000.0) * 1000)
+    delta = float(int(base_shares * ratio))
+    return {"base_shares": base_shares, "share_delta": delta}
 
 
 def get_cash_dividend_sum(conn: sqlite3.Connection, stock_id: str, date_from: Optional[str] = None) -> float:
@@ -1144,6 +1165,7 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
 
     inserted_cash = 0
     inserted_stock = 0
+    updated_stock = 0
     stock_details: List[Dict[str, Any]] = []
 
     for sid in stock_ids:
@@ -1193,6 +1215,7 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
         stock_source_events = sorted(merged_stock_events.values(), key=lambda x: (x["ex_date"], x["ratio"]))
         stock_inserted_cash = 0
         stock_inserted_stock = 0
+        stock_updated_stock = 0
 
         for event in cash_source_events:
             ex_date = event["ex_date"]
@@ -1244,25 +1267,57 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
             source_name = str(event.get("source") or "yahoo_split_auto")
             exists = conn.execute(
                 """
-                SELECT 1
+                SELECT id, allot_date, holding_shares, bonus_shares, source
                 FROM stock_dividends
                 WHERE stock_id = ? AND ex_date = ? AND ABS(ratio - ?) < 0.000001
                 LIMIT 1
                 """,
                 (sid, ex_date, ratio),
             ).fetchone()
-            if exists:
-                continue
-
-            holding_shares = get_shares_on_date(conn, sid, ex_date)
+            holding_shares = get_shares_on_date(
+                conn,
+                sid,
+                ex_date,
+                stock_dividend_before_tx=False,
+                exclude_stock_dividend_id=int(exists["id"]) if exists else None,
+            )
             if holding_shares <= 1e-9:
                 continue
 
-            bonus_shares = round(holding_shares * ratio, 4)
+            settlement = compute_stock_event_settlement(holding_shares, ratio)
+            base_holding_shares = float(settlement["base_shares"])
+            bonus_shares = float(settlement["share_delta"])
             if abs(bonus_shares) <= 1e-9:
                 continue
             if bonus_shares < 0 and holding_shares + bonus_shares < 0:
-                bonus_shares = -holding_shares
+                bonus_shares = -float(int(holding_shares))
+
+            if exists:
+                needs_update = (
+                    normalize_date(exists["allot_date"] or ex_date) != allot_date
+                    or abs(float(exists["holding_shares"] or 0.0) - base_holding_shares) > 1e-9
+                    or abs(float(exists["bonus_shares"] or 0.0) - bonus_shares) > 1e-9
+                    or str(exists["source"] or "") != source_name
+                )
+                if needs_update:
+                    conn.execute(
+                        """
+                        UPDATE stock_dividends
+                        SET allot_date = ?, holding_shares = ?, bonus_shares = ?, source = ?, note = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            allot_date,
+                            base_holding_shares,
+                            bonus_shares,
+                            source_name,
+                            "auto synced from market",
+                            int(exists["id"]),
+                        ),
+                    )
+                    updated_stock += 1
+                    stock_updated_stock += 1
+                continue
 
             conn.execute(
                 """
@@ -1274,7 +1329,7 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
                     ex_date,
                     allot_date,
                     ratio,
-                    holding_shares,
+                    base_holding_shares,
                     bonus_shares,
                     source_name,
                     "auto synced from market",
@@ -1292,10 +1347,11 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
                 "fetched_stock_events": len(stock_source_events),
                 "inserted_cash_events": stock_inserted_cash,
                 "inserted_stock_events": stock_inserted_stock,
+                "updated_stock_events": stock_updated_stock,
             }
         )
 
-    if inserted_stock > 0:
+    if inserted_stock > 0 or updated_stock > 0:
         rebuild_holdings_and_realized(conn)
 
     return {
@@ -2478,8 +2534,38 @@ def get_data_health(deep: bool = False, max_stocks: int = 80) -> Dict[str, Any]:
     return report
 
 
+def upload_backup_to_google_drive(local_file: Path) -> Dict[str, Any]:
+    service_account_file = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "")
+    folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+    if not service_account_file:
+        raise HTTPException(status_code=400, detail="GOOGLE_SERVICE_ACCOUNT_FILE is not configured")
+    if not folder_id:
+        raise HTTPException(status_code=400, detail="GOOGLE_DRIVE_FOLDER_ID is not configured")
+
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=f"Google Drive dependencies missing: {exc}")
+
+    scopes = ["https://www.googleapis.com/auth/drive.file"]
+    credentials = service_account.Credentials.from_service_account_file(service_account_file, scopes=scopes)
+    drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+    metadata = {"name": local_file.name, "parents": [folder_id]}
+    media = MediaFileUpload(str(local_file), mimetype="application/x-sqlite3", resumable=False)
+    created = drive.files().create(body=metadata, media_body=media, fields="id,name,webViewLink").execute()
+    return {
+        "uploaded": True,
+        "drive_file_id": created.get("id"),
+        "drive_file_name": created.get("name"),
+        "drive_web_view_link": created.get("webViewLink"),
+    }
+
+
 @app.post("/api/system/backup-db")
-def backup_database_api() -> Dict[str, Any]:
+def backup_database_api(offsite: bool = False) -> Dict[str, Any]:
     backup_dir = APP_DIR / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2496,6 +2582,11 @@ def backup_database_api() -> Dict[str, Any]:
 
     size_bytes = backup_file.stat().st_size if backup_file.exists() else 0
 
+    offsite_result: Dict[str, Any] = {"requested": bool(offsite), "uploaded": False}
+    if offsite:
+        offsite_result = upload_backup_to_google_drive(backup_file)
+        offsite_result["requested"] = True
+
     with get_conn() as conn:
         write_audit_log(
             conn,
@@ -2503,6 +2594,7 @@ def backup_database_api() -> Dict[str, Any]:
             payload={
                 "backup_file": str(backup_file.name),
                 "size_bytes": int(size_bytes),
+                "offsite": offsite_result,
             },
             severity="INFO",
             actor="api",
@@ -2514,6 +2606,7 @@ def backup_database_api() -> Dict[str, Any]:
         "backup_file": backup_file.name,
         "backup_path": str(backup_file),
         "size_bytes": int(size_bytes),
+        "offsite": offsite_result,
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
 
@@ -2826,8 +2919,13 @@ def create_stock_dividend(payload: StockDividendCreate) -> Dict[str, Any]:
 
     with get_conn() as conn:
         ensure_stock_info(conn, sid)
-        holding_shares = float(payload.holding_shares) if payload.holding_shares is not None else get_shares_on_date(conn, sid, ex_date)
-        bonus_shares = float(payload.bonus_shares) if payload.bonus_shares is not None else round(holding_shares * float(payload.ratio), 4)
+        holding_shares = float(payload.holding_shares) if payload.holding_shares is not None else get_shares_on_date(conn, sid, ex_date, stock_dividend_before_tx=False)
+        if payload.bonus_shares is not None:
+            bonus_shares = float(payload.bonus_shares)
+        else:
+            settlement = compute_stock_event_settlement(holding_shares, float(payload.ratio))
+            holding_shares = float(settlement["base_shares"])
+            bonus_shares = float(settlement["share_delta"])
 
         cur = conn.execute(
             """

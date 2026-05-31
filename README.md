@@ -39,6 +39,8 @@ uvicorn main:app --reload
 - `POST /api/dividends/auto-sync`
 - `GET /api/system/version`
 - `GET /api/system/audit-logs`
+- `GET /api/system/data-health`
+- `POST /api/system/backup-db`
 - `GET /api/dividends/cash`
 - `POST /api/dividends/cash`
 - `PUT /api/dividends/cash/{dividend_id}`
@@ -59,3 +61,36 @@ uvicorn main:app --reload
 - `ANTHROPIC_API_KEY`（可搭配 `ANTHROPIC_MODEL`）
 
 若未設定 API Key，`/api/ai/advisor` 會自動使用本地規則引擎回覆。
+
+## 5) 資料庫備份（本地 + Google Drive 異地）
+
+### 本地備份
+
+- API：`POST /api/system/backup-db`
+- 備份檔會存到 `backups/wealth_backup_YYYYMMDD_HHMMSS.db`
+
+### 備份到 Google Drive
+
+1. 在 Google Cloud 建立 Service Account，啟用 Drive API。
+2. 下載 service account JSON 憑證（例如 `service-account.json`）。
+3. 將目標 Google Drive 資料夾分享給該 service account 的 email。
+4. 設定環境變數：
+
+```bash
+GOOGLE_SERVICE_ACCOUNT_FILE=service-account.json
+GOOGLE_DRIVE_FOLDER_ID=<your_folder_id>
+```
+
+5. 呼叫：
+
+```bash
+POST /api/system/backup-db?offsite=true
+```
+
+### Windows 每日排程範例（22:00）
+
+```powershell
+schtasks /Create /SC DAILY /ST 22:00 /TN "asset_allocation_backup" /TR "powershell -NoProfile -Command \"Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/system/backup-db?offsite=true\"" /F
+```
+
+注意：排程執行時需確保 API 服務在執行，且上述 Google Drive 環境變數對該執行帳號可見。
