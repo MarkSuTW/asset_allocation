@@ -1,6 +1,8 @@
 import json
+import html
 import os
 import re
+import ssl
 import sqlite3
 import urllib.error
 import urllib.parse
@@ -14,6 +16,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+
+from app.core.utils import (
+    get_yahoo_symbol_candidates,
+    normalize_date,
+    normalize_stock_id,
+    parse_numeric,
+    parse_quote_price,
+)
 
 DB_PATH = Path("wealth.db")
 APP_DIR = Path(__file__).resolve().parent
@@ -90,9 +100,9 @@ class StockDividendCreate(BaseModel):
     stock_id: str
     ex_date: str
     allot_date: Optional[str] = None
-    ratio: float = Field(ge=0)
+    ratio: float
     holding_shares: Optional[float] = Field(default=None, ge=0)
-    bonus_shares: Optional[float] = Field(default=None, ge=0)
+    bonus_shares: Optional[float] = None
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -100,9 +110,9 @@ class StockDividendCreate(BaseModel):
 class StockDividendUpdate(BaseModel):
     ex_date: str
     allot_date: Optional[str] = None
-    ratio: float = Field(ge=0)
+    ratio: float
     holding_shares: float = Field(ge=0)
-    bonus_shares: float = Field(ge=0)
+    bonus_shares: float
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -217,28 +227,38 @@ def calculate_transaction_tax(
 def get_shares_on_date(conn: sqlite3.Connection, stock_id: str, on_date: str) -> float:
     sid = normalize_stock_id(stock_id)
     d = normalize_date(on_date)
-    row = conn.execute(
-        """
-        SELECT
-            COALESCE(SUM(CASE WHEN action='buy' THEN shares ELSE 0 END), 0) AS buy_shares,
-            COALESCE(SUM(CASE WHEN action='sell' THEN shares ELSE 0 END), 0) AS sell_shares
-        FROM transactions
-        WHERE stock_id = ? AND date <= ?
-        """,
+    tx_rows = conn.execute(
+        "SELECT id, date, action, shares FROM transactions WHERE stock_id = ? AND date <= ? ORDER BY date, id",
         (sid, d),
-    ).fetchone()
-    if not row:
-        return 0.0
-    bonus_row = conn.execute(
-        """
-        SELECT COALESCE(SUM(bonus_shares), 0) AS bonus_shares
-        FROM stock_dividends
-        WHERE stock_id = ? AND allot_date <= ?
-        """,
+    ).fetchall()
+    div_rows = conn.execute(
+        "SELECT id, allot_date, bonus_shares FROM stock_dividends WHERE stock_id = ? AND allot_date <= ? ORDER BY allot_date, id",
         (sid, d),
-    ).fetchone()
-    bonus = float(bonus_row["bonus_shares"]) if bonus_row else 0.0
-    return max(float(row["buy_shares"]) - float(row["sell_shares"]) + bonus, 0.0)
+    ).fetchall()
+
+    events: List[Dict[str, Any]] = []
+    for r in tx_rows:
+        events.append({"kind": "tx", "date": r["date"], "id": int(r["id"]), "row": r})
+    for r in div_rows:
+        events.append({"kind": "stock_div", "date": r["allot_date"], "id": int(r["id"]), "row": r})
+    events.sort(key=lambda e: (e["date"], 0 if e["kind"] == "stock_div" else 1, e["id"]))
+
+    inventory = 0.0
+    for event in events:
+        if event["kind"] == "stock_div":
+            bonus_shares = float(event["row"]["bonus_shares"])
+            if inventory > 1e-9 and abs(bonus_shares) > 1e-9:
+                inventory = max(inventory + bonus_shares, 0.0)
+            continue
+
+        r = event["row"]
+        shares = float(r["shares"])
+        if r["action"] == "buy":
+            inventory += shares
+        else:
+            inventory = max(inventory - shares, 0.0)
+
+    return max(inventory, 0.0)
 
 
 def get_cash_dividend_sum(conn: sqlite3.Connection, stock_id: str, date_from: Optional[str] = None) -> float:
@@ -269,6 +289,201 @@ def get_bonus_shares_sum(conn: sqlite3.Connection, stock_id: str, date_from: Opt
         params,
     ).fetchone()
     return float(row["v"] if row else 0.0)
+
+
+def detect_oversell_events(conn: sqlite3.Connection, limit: int = 200) -> List[Dict[str, Any]]:
+    tx_rows = conn.execute(
+        "SELECT id, date, stock_id, action, shares FROM transactions ORDER BY date, id"
+    ).fetchall()
+    div_rows = conn.execute(
+        "SELECT id, allot_date, stock_id, bonus_shares FROM stock_dividends ORDER BY allot_date, id"
+    ).fetchall()
+
+    events: List[Dict[str, Any]] = []
+    for r in tx_rows:
+        events.append({"kind": "tx", "date": r["date"], "id": int(r["id"]), "row": r})
+    for r in div_rows:
+        events.append({"kind": "stock_div", "date": r["allot_date"], "id": int(r["id"]), "row": r})
+    events.sort(key=lambda e: (e["date"], 0 if e["kind"] == "stock_div" else 1, e["id"]))
+
+    inventory_by_stock: Dict[str, float] = defaultdict(float)
+    issues: List[Dict[str, Any]] = []
+
+    for event in events:
+        if len(issues) >= max(1, limit):
+            break
+
+        r = event["row"]
+        sid = normalize_stock_id(r["stock_id"])
+        inv = float(inventory_by_stock[sid])
+
+        if event["kind"] == "stock_div":
+            bonus = float(r["bonus_shares"])
+            if inv > 1e-9 and abs(bonus) > 1e-9:
+                inventory_by_stock[sid] = max(inv + bonus, 0.0)
+            continue
+
+        shares = float(r["shares"])
+        action = r["action"]
+        if action == "buy":
+            inventory_by_stock[sid] = inv + shares
+            continue
+
+        if shares > inv + 1e-9:
+            issues.append(
+                {
+                    "tx_id": int(r["id"]),
+                    "date": r["date"],
+                    "stock_id": sid,
+                    "requested_sell_shares": round(shares, 4),
+                    "available_shares": round(inv, 4),
+                    "excess_shares": round(shares - inv, 4),
+                }
+            )
+        inventory_by_stock[sid] = max(inv - shares, 0.0)
+
+    return issues
+
+
+def build_data_health_report(conn: sqlite3.Connection, deep: bool = False, max_stocks: int = 80) -> Dict[str, Any]:
+    checked_at = datetime.now().isoformat(timespec="seconds")
+
+    active_rows = conn.execute(
+        """
+        SELECT stock_id, shares
+        FROM holdings
+        WHERE COALESCE(shares, 0) > 0
+        ORDER BY stock_id
+        """
+    ).fetchall()
+    active_holdings = [
+        {
+            "stock_id": normalize_stock_id(r["stock_id"]),
+            "shares": round(float(r["shares"]), 4),
+        }
+        for r in active_rows
+    ]
+
+    missing_price_rows = conn.execute(
+        """
+        SELECT h.stock_id, COALESCE(s.chinese_name, h.stock_id) AS chinese_name, h.shares, COALESCE(s.current_price, 0) AS current_price
+        FROM holdings h
+        LEFT JOIN stock_info s ON s.stock_id = h.stock_id
+        WHERE COALESCE(h.shares, 0) > 0 AND COALESCE(s.current_price, 0) <= 0
+        ORDER BY h.stock_id
+        """
+    ).fetchall()
+    missing_prices = [
+        {
+            "stock_id": normalize_stock_id(r["stock_id"]),
+            "chinese_name": r["chinese_name"],
+            "shares": round(float(r["shares"]), 4),
+        }
+        for r in missing_price_rows
+    ]
+
+    orphan_rows = conn.execute(
+        """
+        SELECT h.stock_id, h.shares
+        FROM holdings h
+        LEFT JOIN (
+            SELECT stock_id, COUNT(1) AS c
+            FROM transactions
+            GROUP BY stock_id
+        ) t ON t.stock_id = h.stock_id
+        WHERE COALESCE(h.shares, 0) > 0 AND COALESCE(t.c, 0) = 0
+        ORDER BY h.stock_id
+        """
+    ).fetchall()
+    orphan_holdings = [
+        {
+            "stock_id": normalize_stock_id(r["stock_id"]),
+            "shares": round(float(r["shares"]), 4),
+        }
+        for r in orphan_rows
+    ]
+
+    oversell_issues = detect_oversell_events(conn, limit=500)
+
+    missing_stock_events: List[Dict[str, Any]] = []
+    fetch_errors: List[Dict[str, Any]] = []
+
+    if deep:
+        checked_stock_ids = [x["stock_id"] for x in active_holdings][: max(1, int(max_stocks))]
+        for sid in checked_stock_ids:
+            min_tx = conn.execute(
+                "SELECT MIN(date) AS min_date FROM transactions WHERE stock_id = ?",
+                (sid,),
+            ).fetchone()
+            dynamic_years = 2
+            if min_tx and min_tx["min_date"]:
+                try:
+                    tx_year = datetime.fromisoformat(str(min_tx["min_date"])).date().year
+                    dynamic_years = max(dynamic_years, date.today().year - tx_year + 1)
+                except ValueError:
+                    pass
+
+            try:
+                source_events = fetch_yahoo_dividend_events(sid, years=dynamic_years).get("stock") or []
+            except Exception as exc:
+                fetch_errors.append({"stock_id": sid, "message": str(exc)})
+                continue
+
+            db_rows = conn.execute(
+                "SELECT ex_date, ratio FROM stock_dividends WHERE stock_id = ?",
+                (sid,),
+            ).fetchall()
+            db_keys = {(str(r["ex_date"]), round(float(r["ratio"]), 6)) for r in db_rows}
+
+            for event in source_events:
+                ex_date = str(event.get("ex_date") or "")
+                ratio = round(float(event.get("ratio") or 0.0), 6)
+                if not ex_date or abs(ratio) <= 1e-9:
+                    continue
+                if (ex_date, ratio) in db_keys:
+                    continue
+
+                holding_shares = get_shares_on_date(conn, sid, ex_date)
+                if holding_shares <= 1e-9:
+                    continue
+
+                missing_stock_events.append(
+                    {
+                        "stock_id": sid,
+                        "ex_date": ex_date,
+                        "ratio": ratio,
+                        "holding_shares": round(float(holding_shares), 4),
+                        "estimated_share_delta": round(float(holding_shares) * ratio, 4),
+                        "source": str(event.get("source") or "yahoo_split_auto"),
+                    }
+                )
+
+    issue_count = (
+        len(missing_prices)
+        + len(orphan_holdings)
+        + len(oversell_issues)
+        + len(missing_stock_events)
+    )
+
+    return {
+        "checked_at": checked_at,
+        "deep_mode": bool(deep),
+        "active_holding_count": len(active_holdings),
+        "issue_count": issue_count,
+        "issues": {
+            "missing_prices": missing_prices,
+            "orphan_holdings": orphan_holdings,
+            "oversell_transactions": oversell_issues,
+            "missing_stock_events": missing_stock_events,
+        },
+        "meta": {
+            "fetch_errors": fetch_errors,
+            "notes": [
+                "deep_mode 會比對 Yahoo 股票事件來源，可能花較長時間。",
+                "oversell_transactions 代表歷史交易資料出現賣超，會影響重建精準度。",
+            ],
+        },
+    }
 
 
 def ensure_runtime_schema(conn: sqlite3.Connection) -> None:
@@ -370,26 +585,6 @@ def get_conn(auto_repair: bool = True) -> sqlite3.Connection:
             # Avoid interrupting API responses when SQLite is temporarily write-locked.
             pass
     return conn
-
-
-def normalize_date(raw: str) -> str:
-    try:
-        parsed = datetime.fromisoformat(raw.replace("/", "-"))
-        return parsed.date().isoformat()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="date must be ISO format YYYY-MM-DD")
-
-
-def parse_numeric(value: Any) -> float:
-    if value is None:
-        return 0.0
-    s = str(value).strip().replace(",", "")
-    if not s:
-        return 0.0
-    try:
-        return float(s)
-    except ValueError:
-        return 0.0
 
 
 def load_local_stock_name_map() -> Dict[str, str]:
@@ -508,34 +703,6 @@ def get_latest_price(conn: sqlite3.Connection, stock_id: str) -> float:
     return float(row[0]) if row else 0.0
 
 
-def normalize_stock_id(raw: str) -> str:
-    return (raw or "").strip().upper()
-
-
-def parse_quote_price(value: Any) -> Optional[float]:
-    if value is None:
-        return None
-    try:
-        num = float(value)
-    except (TypeError, ValueError):
-        return None
-    return num if num > 0 else None
-
-
-def get_yahoo_symbol_candidates(stock_id: str) -> List[str]:
-    sid = normalize_stock_id(stock_id)
-    if not sid:
-        return []
-
-    base_sid = sid.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ") or sid
-    symbol_candidates = [sid]
-    if base_sid != sid:
-        symbol_candidates.append(base_sid)
-
-    symbols: List[str] = []
-    for code in symbol_candidates:
-        symbols.extend([f"{code}.TW", f"{code}.TWO"])
-    return symbols
 
 
 def fetch_yahoo_dividend_events(stock_id: str, years: int = 2) -> Dict[str, List[Dict[str, Any]]]:
@@ -589,13 +756,15 @@ def fetch_yahoo_dividend_events(stock_id: str, years: int = 2) -> Dict[str, List
             if ts is None or numerator <= 0 or denominator <= 0:
                 continue
             ratio = numerator / denominator - 1.0
-            if ratio <= 1e-9:
+            if abs(ratio) <= 1e-9:
                 continue
             ex_date = datetime.fromtimestamp(int(ts)).date().isoformat()
             key = (ex_date, round(float(ratio), 6))
             stock_events[key] = {
                 "ex_date": ex_date,
                 "ratio": round(float(ratio), 6),
+                "allot_date": ex_date,
+                "source": "yahoo_split_auto",
             }
 
     return {
@@ -603,6 +772,362 @@ def fetch_yahoo_dividend_events(stock_id: str, years: int = 2) -> Dict[str, List
         "stock": sorted(stock_events.values(), key=lambda x: x["ex_date"]),
         "source_symbol": source_symbol,
         "attempted_symbols": symbols,
+    }
+
+
+def parse_twse_roc_date(raw: str) -> Optional[str]:
+    text = html.unescape(str(raw or "")).strip()
+    if not text:
+        return None
+    match = re.search(r"(\d+)年\s*(\d+)月\s*(\d+)日", text)
+    if not match:
+        return None
+    year = int(match.group(1)) + 1911
+    month = int(match.group(2))
+    day = int(match.group(3))
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def parse_roc_flexible_date(raw: Any) -> Optional[str]:
+    text = html.unescape(str(raw or "")).strip()
+    if not text:
+        return None
+
+    # yyyy/mm/dd or yyy/mm/dd(民國)
+    slash_match = re.search(r"(\d{2,4})[/-](\d{1,2})[/-](\d{1,2})", text)
+    if slash_match:
+        year = int(slash_match.group(1))
+        month = int(slash_match.group(2))
+        day = int(slash_match.group(3))
+        if year < 1911:
+            year += 1911
+        try:
+            return date(year, month, day).isoformat()
+        except ValueError:
+            return None
+
+    return parse_twse_roc_date(text)
+
+
+def _mops_post_json(api_name: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    url = f"https://mops.twse.com.tw/mops/api/{api_name}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Origin": "https://mops.twse.com.tw",
+            "Referer": f"https://mops.twse.com.tw/mops/#/web/{'t108sb19' if api_name == 't108sb19_detail' else api_name}",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15, context=ssl._create_unverified_context()) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="ignore"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+
+def _extract_mops_detail_cash_event(detail_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    rows = detail_result.get("data") or []
+    if not rows:
+        return None
+
+    text_chunks: List[str] = []
+    for row in rows:
+        for cell in row:
+            if isinstance(cell, dict):
+                continue
+            if cell is None:
+                continue
+            text_chunks.append(html.unescape(str(cell)))
+    joined = "\n".join(text_chunks)
+
+    ex_match = re.search(r"除權/除息交易日：\s*(\d+年\s*\d+月\s*\d+日)", joined)
+    pay_match = re.search(r"現金股利發放日：\s*(\d+年\s*\d+月\s*\d+日)", joined)
+    amount_match = re.search(r"每壹股配發現金(?:\(股利\))?([0-9.,]+)元", joined)
+
+    ex_date = parse_twse_roc_date(ex_match.group(1)) if ex_match else None
+    pay_date = parse_twse_roc_date(pay_match.group(1)) if pay_match else None
+    amount = parse_quote_price(amount_match.group(1)) if amount_match else None
+    if ex_date is None or amount is None:
+        return None
+    if pay_date is None:
+        pay_date = ex_date
+
+    return {
+        "ex_date": ex_date,
+        "pay_date": pay_date,
+        "amount_per_share": round(float(amount), 6),
+        "source": "mops_t108sb19",
+        "source_label": "MOPS 除權息公告",
+    }
+
+
+def _extract_mops_detail_text(detail_result: Dict[str, Any]) -> str:
+    rows = detail_result.get("data") or []
+    text_chunks: List[str] = []
+    for row in rows:
+        for cell in row:
+            if isinstance(cell, dict) or cell is None:
+                continue
+            text_chunks.append(html.unescape(str(cell)))
+    return "\n".join(text_chunks)
+
+
+def _extract_mops_detail_stock_event(detail_result: Dict[str, Any], announcement_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    joined = _extract_mops_detail_text(detail_result)
+    if not joined:
+        return None
+
+    if not re.search(r"減資|彌補虧損|註銷|換發", joined):
+        return None
+
+    ratio: Optional[float] = None
+    pct_match = re.search(r"減資(?:比率|比例)?\s*[:：]?\s*([0-9]+(?:\.[0-9]+)?)\s*%", joined)
+    if pct_match:
+        ratio = -float(pct_match.group(1)) / 100.0
+
+    if ratio is None:
+        per_share_reduce = re.search(r"每(?:壹|一)股(?:減少|註銷)\s*([0-9]+(?:\.[0-9]+)?)\s*股", joined)
+        if per_share_reduce:
+            ratio = -float(per_share_reduce.group(1))
+
+    if ratio is None:
+        per_thousand_reduce = re.search(r"每(?:壹仟|一千|千)股(?:減少|註銷)\s*([0-9]+(?:\.[0-9]+)?)\s*股", joined)
+        if per_thousand_reduce:
+            ratio = -float(per_thousand_reduce.group(1)) / 1000.0
+
+    if ratio is None:
+        per_thousand_exchange = re.search(r"每(?:壹仟|一千|千)股換發\s*([0-9]+(?:\.[0-9]+)?)\s*股", joined)
+        if per_thousand_exchange:
+            ratio = float(per_thousand_exchange.group(1)) / 1000.0 - 1.0
+
+    if ratio is None or abs(ratio) <= 1e-9:
+        return None
+
+    ex_match = re.search(r"減資換發股票基準日[:：]\s*(\d+年\s*\d+月\s*\d+日)", joined)
+    if not ex_match:
+        ex_match = re.search(r"權利分派基準日[:：]\s*(\d+年\s*\d+月\s*\d+日)", joined)
+    ex_date = parse_twse_roc_date(ex_match.group(1)) if ex_match else parse_roc_flexible_date(announcement_date)
+    if ex_date is None:
+        return None
+
+    return {
+        "ex_date": ex_date,
+        "allot_date": ex_date,
+        "ratio": round(float(ratio), 6),
+        "source": "mops_capital_reduction_auto",
+        "source_label": "MOPS 減資公告",
+    }
+
+
+def fetch_mops_capital_reduction_events(stock_id: str, start_roc_year: int, end_roc_year: int) -> Dict[str, Any]:
+    sid = normalize_stock_id(stock_id)
+    if not sid:
+        return {"stock": [], "source": "invalid_stock_id", "attempted_urls": []}
+
+    start = max(1, int(start_roc_year))
+    end = max(start, int(end_roc_year))
+    attempted_urls: List[str] = []
+    stock_events: Dict[tuple, Dict[str, Any]] = {}
+
+    for roc_year in range(start, end + 1):
+        payload = {
+            "companyId": sid,
+            "dataType": "2",
+            "year": str(roc_year),
+            "month": "all",
+            "firstDay": "01",
+            "lastDay": "31",
+        }
+        attempted_urls.append(f"https://mops.twse.com.tw/mops/api/t108sb19?companyId={sid}&year={roc_year}&month=all")
+        response = _mops_post_json("t108sb19", payload)
+        if not response or int(response.get("code") or 0) != 200:
+            continue
+
+        result = response.get("result") or {}
+        record_rows = (result.get("recordDateAnnouncement") or {}).get("data") or []
+        for row in record_rows:
+            if len(row) < 5:
+                continue
+            announcement_date = parse_roc_flexible_date(row[0])
+            detail_ref = row[4]
+            if not isinstance(detail_ref, dict):
+                continue
+            params = detail_ref.get("parameters") or {}
+            detail_payload = {
+                "companyId": params.get("companyId") or sid,
+                "serialNumber": params.get("serialNumber"),
+                "detailReportKind": params.get("detailReportKind") or "A",
+                "declarationDate": params.get("declarationDate") or "",
+                "etn_no": params.get("etn_no") or "",
+            }
+            attempted_urls.append(
+                "https://mops.twse.com.tw/mops/api/t108sb19_detail"
+                f"?companyId={sid}&serialNumber={detail_payload['serialNumber']}"
+            )
+            detail_response = _mops_post_json("t108sb19_detail", detail_payload)
+            if not detail_response or int(detail_response.get("code") or 0) != 200:
+                continue
+
+            detail_result = detail_response.get("result") or {}
+            event = _extract_mops_detail_stock_event(detail_result, announcement_date=announcement_date)
+            if not event:
+                continue
+
+            key = (event["ex_date"], round(float(event["ratio"]), 6))
+            stock_events[key] = event
+
+    return {
+        "stock": sorted(stock_events.values(), key=lambda x: (x["ex_date"], x["ratio"])),
+        "source": "mops_capital_reduction_auto",
+        "source_symbol": sid,
+        "attempted_urls": attempted_urls,
+    }
+
+
+def fetch_mops_dividend_announcement_events(stock_id: str, years: int = 2) -> Dict[str, Any]:
+    sid = normalize_stock_id(stock_id)
+    if not sid:
+        return {"cash": [], "stock": [], "source": "invalid_stock_id", "attempted_urls": []}
+
+    safe_years = max(1, min(int(years), 10))
+    current_roc_year = date.today().year - 1911
+    attempted_urls: List[str] = []
+    cash_events: Dict[tuple, Dict[str, Any]] = {}
+
+    for roc_year in range(current_roc_year, current_roc_year - safe_years, -1):
+        payload = {
+            "companyId": sid,
+            "dataType": "2",
+            "year": str(roc_year),
+            "month": "all",
+            "firstDay": "",
+            "lastDay": "",
+        }
+        attempted_urls.append(f"https://mops.twse.com.tw/mops/api/t108sb19?companyId={sid}&year={roc_year}")
+        response = _mops_post_json("t108sb19", payload)
+        if not response or int(response.get("code") or 0) != 200:
+            continue
+
+        result = response.get("result") or {}
+        record_rows = (result.get("recordDateAnnouncement") or {}).get("data") or []
+        for row in record_rows:
+            if len(row) < 5:
+                continue
+            detail_ref = row[4]
+            if not isinstance(detail_ref, dict):
+                continue
+            params = detail_ref.get("parameters") or {}
+            detail_payload = {
+                "companyId": params.get("companyId") or sid,
+                "serialNumber": params.get("serialNumber"),
+                "detailReportKind": params.get("detailReportKind") or "A",
+                "declarationDate": params.get("declarationDate") or "",
+                "etn_no": params.get("etn_no") or "",
+            }
+            attempted_urls.append(f"https://mops.twse.com.tw/mops/api/t108sb19_detail?companyId={sid}&serialNumber={detail_payload['serialNumber']}")
+            detail_response = _mops_post_json("t108sb19_detail", detail_payload)
+            if not detail_response or int(detail_response.get("code") or 0) != 200:
+                continue
+
+            detail_result = detail_response.get("result") or {}
+            event = _extract_mops_detail_cash_event(detail_result)
+            if not event:
+                continue
+
+            key = (event["ex_date"], round(float(event["amount_per_share"]), 6), event["pay_date"])
+            cash_events[key] = event
+
+    return {
+        "cash": sorted(cash_events.values(), key=lambda x: (x["ex_date"], x["pay_date"], x["amount_per_share"])),
+        "stock": [],
+        "source": "mops_t108sb19",
+        "source_symbol": sid,
+        "attempted_urls": attempted_urls,
+    }
+
+
+def fetch_twse_dividend_list_events(stock_id: str, years: int = 2) -> Dict[str, Any]:
+    sid = normalize_stock_id(stock_id)
+    if not sid:
+        return {"cash": [], "stock": [], "source": "invalid_stock_id", "attempted_urls": []}
+
+    safe_years = max(1, min(int(years), 10))
+    current_roc_year = date.today().year - 1911
+    start_year = max(1, current_roc_year - safe_years + 1)
+    attempted_urls: List[str] = []
+    cash_events: Dict[tuple, Dict[str, Any]] = {}
+
+    url_candidates = [
+        (
+            "https://www.twse.com.tw/zh/ETFortune/dividendList"
+            f"?stkNo={urllib.parse.quote(sid)}&startDate={start_year}&endDate={current_roc_year}"
+        ),
+        f"https://www.twse.com.tw/zh/ETFortune/dividendList?stkNo={urllib.parse.quote(sid)}",
+    ]
+
+    for url in url_candidates:
+        attempted_urls.append(url)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "text/html"})
+            with urllib.request.urlopen(req, timeout=12, context=ssl._create_unverified_context()) as resp:
+                payload = resp.read().decode("utf-8", errors="ignore")
+        except (urllib.error.URLError, TimeoutError):
+            continue
+
+        row_matches = re.findall(r'<tr[^>]*onclick="document\.location = [^"]+;">(.*?)</tr>', payload, re.S)
+        for row_html in row_matches:
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.S)
+            if len(cells) < 6:
+                continue
+
+            row_sid = html.unescape(re.sub(r"<[^>]+>", "", cells[0])).strip().upper()
+            if row_sid != sid:
+                continue
+
+            ex_date = parse_twse_roc_date(cells[2])
+            pay_date = parse_twse_roc_date(cells[4])
+            amount = parse_quote_price(html.unescape(re.sub(r"<[^>]+>", "", cells[5])).strip())
+            if ex_date is None or amount is None:
+                continue
+            if pay_date is None:
+                pay_date = ex_date
+
+            key = (ex_date, round(float(amount), 6), pay_date)
+            cash_events[key] = {
+                "ex_date": ex_date,
+                "pay_date": pay_date,
+                "amount_per_share": round(float(amount), 6),
+                "source": "twse_etfortune",
+                "source_label": "TWSE 配息清單",
+            }
+
+        if cash_events:
+            break
+
+    if cash_events:
+        return {
+            "cash": sorted(cash_events.values(), key=lambda x: (x["ex_date"], x["pay_date"], x["amount_per_share"])),
+            "stock": [],
+            "source": "twse_etfortune",
+            "source_symbol": sid,
+            "attempted_urls": attempted_urls,
+        }
+
+    mops_events = fetch_mops_dividend_announcement_events(sid, years=years)
+    attempted_urls.extend(mops_events.get("attempted_urls") or [])
+    return {
+        "cash": mops_events.get("cash") or [],
+        "stock": [],
+        "source": mops_events.get("source") or "mops_t108sb19",
+        "source_symbol": sid,
+        "attempted_urls": attempted_urls,
     }
 
 
@@ -622,16 +1147,61 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
     stock_details: List[Dict[str, Any]] = []
 
     for sid in stock_ids:
-        market_events = fetch_yahoo_dividend_events(sid, years=years)
+        min_tx_date_row = conn.execute(
+            "SELECT MIN(date) AS min_date FROM transactions WHERE stock_id = ?",
+            (sid,),
+        ).fetchone()
+        requested_years = max(1, int(years))
+        current_roc_year = date.today().year - 1911
+        start_roc_year = max(current_roc_year - requested_years + 1, 1)
+        dynamic_years = requested_years
+        if min_tx_date_row and min_tx_date_row["min_date"]:
+            try:
+                tx_year_ad = datetime.fromisoformat(str(min_tx_date_row["min_date"])).date().year
+                tx_year_roc = tx_year_ad - 1911
+                start_roc_year = max(1, min(start_roc_year, tx_year_roc))
+                dynamic_years = max(dynamic_years, date.today().year - tx_year_ad + 1)
+            except ValueError:
+                pass
+
+        twse_events = fetch_twse_dividend_list_events(sid, years=dynamic_years)
+        yahoo_events = fetch_yahoo_dividend_events(sid, years=dynamic_years)
+        mops_reduction_events = fetch_mops_capital_reduction_events(sid, start_roc_year, current_roc_year)
+        cash_source_events = twse_events.get("cash") or []
+        if not cash_source_events:
+            cash_source_events = yahoo_events.get("cash") or []
+
+        merged_stock_events: Dict[tuple, Dict[str, Any]] = {}
+        for event in yahoo_events.get("stock") or []:
+            key = (event["ex_date"], round(float(event["ratio"]), 6))
+            merged_stock_events[key] = {
+                "ex_date": event["ex_date"],
+                "allot_date": event.get("allot_date") or event["ex_date"],
+                "ratio": float(event["ratio"]),
+                "source": str(event.get("source") or "yahoo_split_auto"),
+            }
+
+        for event in mops_reduction_events.get("stock") or []:
+            key = (event["ex_date"], round(float(event["ratio"]), 6))
+            merged_stock_events[key] = {
+                "ex_date": event["ex_date"],
+                "allot_date": event.get("allot_date") or event["ex_date"],
+                "ratio": float(event["ratio"]),
+                "source": str(event.get("source") or "mops_capital_reduction_auto"),
+            }
+
+        stock_source_events = sorted(merged_stock_events.values(), key=lambda x: (x["ex_date"], x["ratio"]))
         stock_inserted_cash = 0
         stock_inserted_stock = 0
 
-        for event in market_events["cash"]:
+        for event in cash_source_events:
             ex_date = event["ex_date"]
             amount_per_share = float(event["amount_per_share"])
+            pay_date = normalize_date(event.get("pay_date") or ex_date)
+            source_name = str(event.get("source") or ("yahoo_auto" if event in (yahoo_events.get("cash") or []) else "twse_etfortune"))
             exists = conn.execute(
                 """
-                SELECT 1
+                SELECT id, pay_date, source
                 FROM cash_dividends
                 WHERE stock_id = ? AND ex_date = ? AND ABS(amount_per_share - ?) < 0.000001
                 LIMIT 1
@@ -639,6 +1209,17 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
                 (sid, ex_date, amount_per_share),
             ).fetchone()
             if exists:
+                existing_pay_date = normalize_date(exists["pay_date"] or ex_date)
+                existing_source = str(exists["source"] or "")
+                if existing_pay_date != pay_date or existing_source != source_name:
+                    conn.execute(
+                        """
+                        UPDATE cash_dividends
+                        SET pay_date = ?, source = ?, note = ?
+                        WHERE id = ?
+                        """,
+                        (pay_date, source_name, "backfilled from official dividend source", int(exists["id"])),
+                    )
                 continue
 
             holding_shares = get_shares_on_date(conn, sid, ex_date)
@@ -651,14 +1232,16 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
                 INSERT INTO cash_dividends (stock_id, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source, note)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (sid, ex_date, ex_date, amount_per_share, holding_shares, cash_amount, "yahoo_auto", "auto synced from market"),
+                (sid, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source_name, "auto synced from official source" if source_name != "yahoo_auto" else "auto synced from market"),
             )
             inserted_cash += 1
             stock_inserted_cash += 1
 
-        for event in market_events["stock"]:
+        for event in stock_source_events:
             ex_date = event["ex_date"]
+            allot_date = normalize_date(event.get("allot_date") or ex_date)
             ratio = float(event["ratio"])
+            source_name = str(event.get("source") or "yahoo_split_auto")
             exists = conn.execute(
                 """
                 SELECT 1
@@ -676,15 +1259,26 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
                 continue
 
             bonus_shares = round(holding_shares * ratio, 4)
-            if bonus_shares <= 1e-9:
+            if abs(bonus_shares) <= 1e-9:
                 continue
+            if bonus_shares < 0 and holding_shares + bonus_shares < 0:
+                bonus_shares = -holding_shares
 
             conn.execute(
                 """
                 INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, source, note)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (sid, ex_date, ex_date, ratio, holding_shares, bonus_shares, "yahoo_split_auto", "auto synced from market"),
+                (
+                    sid,
+                    ex_date,
+                    allot_date,
+                    ratio,
+                    holding_shares,
+                    bonus_shares,
+                    source_name,
+                    "auto synced from market",
+                ),
             )
             inserted_stock += 1
             stock_inserted_stock += 1
@@ -692,10 +1286,10 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
         stock_details.append(
             {
                 "stock_id": sid,
-                "source": market_events.get("source_symbol") or "unavailable",
-                "attempted_symbols": market_events.get("attempted_symbols") or [],
-                "fetched_cash_events": len(market_events.get("cash", [])),
-                "fetched_stock_events": len(market_events.get("stock", [])),
+                "source": (cash_source_events[0].get("source") if cash_source_events else (yahoo_events.get("source_symbol") or "unavailable")),
+                "attempted_symbols": yahoo_events.get("attempted_symbols") or [],
+                "fetched_cash_events": len(cash_source_events),
+                "fetched_stock_events": len(stock_source_events),
                 "inserted_cash_events": stock_inserted_cash,
                 "inserted_stock_events": stock_inserted_stock,
             }
@@ -737,9 +1331,9 @@ def fetch_twse_realtime_quote(stock_id: str) -> Dict[str, Any]:
         url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=" + urllib.parse.quote("|".join(ex_list))
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=8) as resp:
+            with urllib.request.urlopen(req, timeout=8, context=ssl._create_unverified_context()) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ssl.SSLError, OSError):
             continue
 
         msg_arr = payload.get("msgArray", []) if isinstance(payload, dict) else []
@@ -837,12 +1431,21 @@ def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
                 best = q
                 break
 
-        close_price = parse_quote_price(best.get("regularMarketPreviousClose"))
+        # Prefer market price to better reflect current quote, fallback to previous close.
+        close_price = parse_quote_price(best.get("regularMarketPrice"))
         if close_price is None:
-            close_price = parse_quote_price(best.get("regularMarketPrice"))
+            close_price = parse_quote_price(best.get("regularMarketPreviousClose"))
         chinese_name = (best.get("shortName") or best.get("longName") or "").strip() or None
         if close_price is not None:
             source = "yahoo_quote"
+
+    if close_price is None:
+        twse_rt = fetch_twse_realtime_quote(sid)
+        if twse_rt.get("close_price") is not None:
+            close_price = float(twse_rt["close_price"])
+            if not chinese_name:
+                chinese_name = twse_rt.get("chinese_name")
+            source = str(twse_rt.get("source") or "twse_realtime")
 
     if close_price is None:
         for symbol in symbols:
@@ -872,8 +1475,11 @@ def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
             )
             twse_req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
             try:
-                with urllib.request.urlopen(twse_req, timeout=8) as resp:
+                with urllib.request.urlopen(twse_req, timeout=8, context=ssl._create_unverified_context()) as resp:
                     twse_payload = json.loads(resp.read().decode("utf-8"))
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, TypeError, ssl.SSLError, OSError):
+                continue
+            try:
                 data = twse_payload.get("data", [])
                 if data:
                     closes = [parse_quote_price(row[6] if len(row) > 6 else None) for row in data]
@@ -882,16 +1488,8 @@ def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
                         close_price = closes[-1]
                         source = "twse_openapi"
                         break
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, TypeError):
+            except (KeyError, IndexError, TypeError):
                 continue
-
-    if close_price is None:
-        twse_rt = fetch_twse_realtime_quote(sid)
-        if twse_rt.get("close_price") is not None:
-            close_price = float(twse_rt["close_price"])
-            if not chinese_name:
-                chinese_name = twse_rt.get("chinese_name")
-            source = str(twse_rt.get("source") or "twse_realtime")
 
     if close_price is None:
         stooq = fetch_stooq_quote(sid)
@@ -1041,6 +1639,77 @@ def refresh_missing_prices(conn: sqlite3.Connection, limit: int = 500) -> Dict[s
     }
 
 
+def refresh_market_prices(
+    conn: sqlite3.Connection,
+    limit: int = 500,
+    scope: str = "transactions",
+    stock_ids: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    safe_limit = max(1, min(limit, 5000))
+    scope_key = (scope or "transactions").strip().lower()
+
+    explicit_stock_ids = [normalize_stock_id(sid) for sid in (stock_ids or []) if normalize_stock_id(sid)]
+    if explicit_stock_ids:
+        rows = [{"stock_id": sid} for sid in dict.fromkeys(explicit_stock_ids)]
+    elif scope_key == "holdings":
+        rows = conn.execute(
+            """
+            SELECT DISTINCT stock_id
+            FROM holdings
+            WHERE COALESCE(shares, 0) > 0
+            ORDER BY stock_id
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT stock_id
+            FROM transactions
+            ORDER BY stock_id
+            LIMIT ?
+            """,
+            (safe_limit,),
+        ).fetchall()
+
+    stock_ids = [normalize_stock_id(r["stock_id"]) for r in rows if normalize_stock_id(r["stock_id"])]
+
+    updated = 0
+    items: List[Dict[str, Any]] = []
+    for sid in stock_ids:
+        quote = fetch_latest_quote(sid)
+        close_price = parse_quote_price(quote.get("close_price"))
+        source = str(quote.get("source") or "unknown")
+
+        if close_price is not None and close_price > 0:
+            upsert_stock_quote(conn, sid, quote.get("chinese_name"), float(close_price))
+            updated += 1
+
+        row = conn.execute(
+            "SELECT COALESCE(chinese_name, '') AS chinese_name, COALESCE(current_price, 0) AS current_price FROM stock_info WHERE stock_id = ?",
+            (sid,),
+        ).fetchone()
+        items.append(
+            {
+                "stock_id": sid,
+                "chinese_name": (row["chinese_name"] if row and row["chinese_name"] else sid),
+                "current_price": float(row["current_price"]) if row else 0.0,
+                "source": source,
+                "updated": close_price is not None and close_price > 0,
+            }
+        )
+
+    failed = sum(1 for x in items if not x["updated"])
+    return {
+        "scope": "explicit" if explicit_stock_ids else scope_key,
+        "checked": len(stock_ids),
+        "updated": updated,
+        "failed": failed,
+        "items": items,
+    }
+
+
 def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
     tx_rows = conn.execute(
         "SELECT id, date, stock_id, action, shares, price, fees, transaction_tax FROM transactions ORDER BY date, id"
@@ -1060,19 +1729,39 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
     tax_settings = get_transaction_tax_settings(conn)
     conn.execute("DELETE FROM holdings")
 
+    def apply_stock_dividend_to_lots(lots: deque, bonus_shares: float) -> None:
+        if abs(bonus_shares) <= 1e-9:
+            return
+        current_inventory = sum(lot["shares"] for lot in lots)
+        if current_inventory <= 1e-9:
+            return
+
+        if bonus_shares > 0:
+            lots.append(
+                {
+                    "buy_tx_id": None,
+                    "shares": bonus_shares,
+                    "unit_cost": 0.0,
+                }
+            )
+            return
+
+        target_inventory = max(current_inventory + bonus_shares, 0.0)
+        factor = target_inventory / current_inventory if current_inventory > 0 else 0.0
+        for lot in lots:
+            lot["shares"] = max(float(lot["shares"]) * factor, 0.0)
+        while lots and float(lots[0]["shares"]) <= 1e-9:
+            lots.popleft()
+        for idx in range(len(lots) - 1, -1, -1):
+            if float(lots[idx]["shares"]) <= 1e-9:
+                del lots[idx]
+
     for event in events:
         if event["kind"] == "stock_div":
             r = event["row"]
             sid = normalize_stock_id(r["stock_id"])
             bonus_shares = float(r["bonus_shares"])
-            if bonus_shares > 1e-9:
-                lots_by_stock[sid].append(
-                    {
-                        "buy_tx_id": None,
-                        "shares": bonus_shares,
-                        "unit_cost": 0.0,
-                    }
-                )
+            apply_stock_dividend_to_lots(lots_by_stock[sid], bonus_shares)
             continue
 
         r = event["row"]
@@ -1101,10 +1790,12 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
             )
         else:
             available = sum(lot["shares"] for lot in lots_by_stock[sid])
-            if shares > available + 1e-9:
-                raise HTTPException(status_code=400, detail=f"Insufficient shares to sell: {sid}")
+            sell_shares = min(shares, available)
+            if sell_shares <= 1e-9:
+                conn.execute("UPDATE transactions SET realized_profit = ? WHERE id = ?", (0.0, int(r["id"])))
+                continue
 
-            remaining = shares
+            remaining = sell_shares
             fifo_cost = 0.0
             while remaining > 1e-9 and lots_by_stock[sid]:
                 lot = lots_by_stock[sid][0]
@@ -1115,7 +1806,8 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
                 if lot["shares"] <= 1e-9:
                     lots_by_stock[sid].popleft()
 
-            proceeds = shares * price - fees - transaction_tax
+            ratio = sell_shares / shares if shares > 0 else 0.0
+            proceeds = sell_shares * price - (fees * ratio) - (transaction_tax * ratio)
             realized = proceeds - fifo_cost
 
         conn.execute("UPDATE transactions SET realized_profit = ? WHERE id = ?", (round(realized, 6), int(r["id"])))
@@ -1160,19 +1852,39 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
     realized_totals: Dict[str, float] = defaultdict(float)
     metrics_by_tx: Dict[int, Dict[str, Any]] = {}
 
+    def apply_stock_dividend_to_lots(lots: deque, bonus_shares: float) -> None:
+        if abs(bonus_shares) <= 1e-9:
+            return
+        current_inventory = sum(lot["shares"] for lot in lots)
+        if current_inventory <= 1e-9:
+            return
+
+        if bonus_shares > 0:
+            lots.append(
+                {
+                    "buy_tx_id": None,
+                    "shares": bonus_shares,
+                    "unit_cost": 0.0,
+                }
+            )
+            return
+
+        target_inventory = max(current_inventory + bonus_shares, 0.0)
+        factor = target_inventory / current_inventory if current_inventory > 0 else 0.0
+        for lot in lots:
+            lot["shares"] = max(float(lot["shares"]) * factor, 0.0)
+        while lots and float(lots[0]["shares"]) <= 1e-9:
+            lots.popleft()
+        for idx in range(len(lots) - 1, -1, -1):
+            if float(lots[idx]["shares"]) <= 1e-9:
+                del lots[idx]
+
     for event in events:
         if event["kind"] == "stock_div":
             r = event["row"]
             sid = normalize_stock_id(r["stock_id"])
             bonus_shares = float(r["bonus_shares"])
-            if bonus_shares > 1e-9:
-                lots_by_stock[sid].append(
-                    {
-                        "buy_tx_id": None,
-                        "shares": bonus_shares,
-                        "unit_cost": 0.0,
-                    }
-                )
+            apply_stock_dividend_to_lots(lots_by_stock[sid], bonus_shares)
             continue
 
         r = event["row"]
@@ -1196,7 +1908,18 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
                 }
             )
         else:
-            remaining = shares
+            available = sum(lot["shares"] for lot in lots_by_stock[sid])
+            sell_shares = min(shares, available)
+            if sell_shares <= 1e-9:
+                metrics_by_tx[tx_id] = {
+                    "inventory_after": round(sum(lot["shares"] for lot in lots_by_stock[sid]), 4),
+                    "realized_total": round(realized_totals[sid], 2),
+                    "unrealized_profit_tx": None,
+                    "return_rate_tx": None,
+                }
+                continue
+
+            remaining = sell_shares
             while remaining > 1e-9 and lots_by_stock[sid]:
                 lot = lots_by_stock[sid][0]
                 take = min(remaining, lot["shares"])
@@ -1205,7 +1928,8 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
                 remaining -= take
                 if lot["shares"] <= 1e-9:
                     lots_by_stock[sid].popleft()
-            proceeds = shares * price - fees - transaction_tax
+            ratio = sell_shares / shares if shares > 0 else 0.0
+            proceeds = sell_shares * price - (fees * ratio) - (transaction_tax * ratio)
             realized = proceeds - fifo_cost
 
         rate = None
@@ -1457,7 +2181,6 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
             rate = rate / 100.0
         interest = (principal * rate / 365.0) * days
         total_interest += interest
-
         loan_items.append(
             {
                 "lender": row["lender"],
@@ -1745,6 +2468,53 @@ def get_system_version() -> Dict[str, Any]:
             "stock_info_self_healing",
             "audit_log",
         ],
+    }
+
+
+@app.get("/api/system/data-health")
+def get_data_health(deep: bool = False, max_stocks: int = 80) -> Dict[str, Any]:
+    with get_conn() as conn:
+        report = build_data_health_report(conn, deep=deep, max_stocks=max_stocks)
+    return report
+
+
+@app.post("/api/system/backup-db")
+def backup_database_api() -> Dict[str, Any]:
+    backup_dir = APP_DIR / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_file = backup_dir / f"wealth_backup_{ts}.db"
+
+    src = sqlite3.connect(DB_PATH)
+    dst = sqlite3.connect(backup_file)
+    try:
+        src.backup(dst)
+    finally:
+        dst.close()
+        src.close()
+
+    size_bytes = backup_file.stat().st_size if backup_file.exists() else 0
+
+    with get_conn() as conn:
+        write_audit_log(
+            conn,
+            event_type="backup_database",
+            payload={
+                "backup_file": str(backup_file.name),
+                "size_bytes": int(size_bytes),
+            },
+            severity="INFO",
+            actor="api",
+        )
+        conn.commit()
+
+    return {
+        "message": "database backup created",
+        "backup_file": backup_file.name,
+        "backup_path": str(backup_file),
+        "size_bytes": int(size_bytes),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
     }
 
 
@@ -2393,6 +3163,34 @@ def refresh_missing_prices_api(limit: int = 500) -> Dict[str, Any]:
         conn.commit()
     return {
         "message": "missing price refresh completed",
+        **result,
+    }
+
+
+@app.post("/api/stock/refresh-prices")
+def refresh_prices_api(limit: int = 500, scope: str = "transactions", stock_ids: Optional[str] = None) -> Dict[str, Any]:
+    explicit_stock_ids = []
+    if stock_ids:
+        explicit_stock_ids = [normalize_stock_id(part) for part in stock_ids.split(",") if normalize_stock_id(part)]
+    with get_conn() as conn:
+        result = refresh_market_prices(conn, limit=limit, scope=scope, stock_ids=explicit_stock_ids)
+        write_audit_log(
+            conn,
+            event_type="refresh_prices",
+            payload={
+                "limit": int(limit),
+                "scope": result.get("scope"),
+                "stock_ids": explicit_stock_ids[:50],
+                "checked": result.get("checked", 0),
+                "updated": result.get("updated", 0),
+                "failed": result.get("failed", 0),
+            },
+            severity="INFO",
+            actor="api",
+        )
+        conn.commit()
+    return {
+        "message": "price refresh completed",
         **result,
     }
 

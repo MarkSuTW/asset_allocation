@@ -344,20 +344,33 @@ def parse_stock_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]]
         if date_col and action_col and shares_col and price_col:
             for _, row in tx_df.iterrows():
                 raw_action = normalize_text(row.get(action_col, "")).lower()
+                raw_shares = clean_numeric(row.get(shares_col, 0))
+                raw_price = clean_numeric(row.get(price_col, 0))
+                raw_amount = clean_numeric(row.get(find_col(tx_df.columns, ["成交金額", "成交額", "amount"]), 0)) if find_col(tx_df.columns, ["成交金額", "成交額", "amount"]) else 0.0
+
                 if any(k in raw_action for k in ["買", "buy"]):
                     action = "buy"
                 elif any(k in raw_action for k in ["賣", "sell"]):
                     action = "sell"
                 else:
-                    continue
+                    if raw_shares < 0 or raw_amount < 0:
+                        action = "sell"
+                    elif raw_shares > 0 or raw_amount > 0:
+                        action = "buy"
+                    else:
+                        continue
 
-                shares = clean_numeric(row.get(shares_col, 0))
-                price = clean_numeric(row.get(price_col, 0))
+                shares = abs(raw_shares)
+                price = abs(raw_price)
                 fees = clean_numeric(row.get(fees_col, 0)) if fees_col else 0.0
                 tx_date = normalize_date(row.get(date_col))
 
                 if shares <= 0 or price <= 0:
                     continue
+
+                # 部分 CSV 會把賣出列的股數或成交金額寫成負值；匯入時統一存成正數並以 action 表示方向。
+                if raw_shares < 0 or raw_amount < 0:
+                    action = "sell"
 
                 realized = apply_transaction_to_holding(conn, stock_id, action, shares, price, fees)
                 tax_rate = 0.001 if stock_id.startswith("00") else 0.003

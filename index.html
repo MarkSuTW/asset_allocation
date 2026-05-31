@@ -178,6 +178,52 @@
         color: var(--text-main);
       }
 
+      .source-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.3rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+
+      .source-badge.official {
+        background: rgba(28, 201, 150, 0.16);
+        color: #8ff5cf;
+        border-color: rgba(28, 201, 150, 0.35);
+      }
+
+      .source-badge.backup {
+        background: rgba(255, 184, 77, 0.16);
+        color: #ffd99b;
+        border-color: rgba(255, 184, 77, 0.35);
+      }
+
+      .source-badge.manual {
+        background: rgba(79, 125, 255, 0.16);
+        color: #b7cbff;
+        border-color: rgba(79, 125, 255, 0.35);
+      }
+
+      .source-badge.unknown {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text-dim);
+        border-color: rgba(255, 255, 255, 0.12);
+      }
+
+      .source-badge-text {
+        display: block;
+        margin-top: 0.25rem;
+        font-size: 0.72rem;
+        color: var(--text-dim);
+        word-break: break-all;
+      }
+
       .btn-neon {
         border: 1px solid rgba(0, 208, 255, 0.45);
         color: #d8f9ff;
@@ -190,8 +236,74 @@
         background: linear-gradient(120deg, rgba(0, 208, 255, 0.35), rgba(79, 125, 255, 0.35));
       }
 
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.32rem 0.7rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        border: 1px solid var(--line);
+        color: var(--text-main);
+        background: rgba(255, 255, 255, 0.04);
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--ok);
+        box-shadow: 0 0 10px rgba(31, 209, 138, 0.65);
+      }
+
+      .status-dot.busy {
+        background: var(--warn);
+        box-shadow: 0 0 10px rgba(255, 200, 87, 0.65);
+      }
+
+      .loading-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(5, 7, 13, 0.62);
+        backdrop-filter: blur(2px);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .loading-box {
+        padding: 1rem 1.2rem;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: rgba(21, 30, 48, 0.92);
+        color: var(--text-main);
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        font-size: 0.92rem;
+      }
+
+      .setting-panel-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+      }
+
+      .setting-panel-subtitle {
+        font-size: 0.82rem;
+        color: var(--text-dim);
+      }
+
       .nav-tabs {
         border-bottom: 1px solid var(--line);
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+      }
+
+      .nav-tabs .nav-item {
+        flex: 0 0 auto;
       }
 
       .nav-tabs .nav-link {
@@ -342,15 +454,43 @@
       }
 
       .status-badge.buy {
-        background: rgba(255, 107, 107, 0.2);
-        border: 1px solid rgba(255, 107, 107, 0.4);
+        background: rgba(255, 107, 107, 0.22);
+        border: 1px solid rgba(255, 107, 107, 0.45);
         color: var(--danger);
       }
 
       .status-badge.sell {
-        background: rgba(31, 209, 138, 0.2);
-        border: 1px solid rgba(31, 209, 138, 0.4);
+        background: rgba(31, 209, 138, 0.22);
+        border: 1px solid rgba(31, 209, 138, 0.45);
         color: var(--ok);
+      }
+
+      .action-toggle {
+        border-width: 1px;
+      }
+
+      .action-toggle.buy {
+        border-color: rgba(255, 107, 107, 0.35);
+        color: #ffb4b4;
+        background: rgba(255, 107, 107, 0.08);
+      }
+
+      .action-toggle.sell {
+        border-color: rgba(31, 209, 138, 0.35);
+        color: #9df5d0;
+        background: rgba(31, 209, 138, 0.08);
+      }
+
+      .action-toggle.buy.active {
+        background: rgba(255, 107, 107, 0.3);
+        border-color: rgba(255, 107, 107, 0.65);
+        color: #fff1f1;
+      }
+
+      .action-toggle.sell.active {
+        background: rgba(31, 209, 138, 0.3);
+        border-color: rgba(31, 209, 138, 0.65);
+        color: #eafff4;
       }
 
       .modal {
@@ -423,10 +563,24 @@
   <body>
     <div class="grid-overlay"></div>
     <div id="app" class="container-fluid">
+      <div v-if="isInitialLoading" class="loading-overlay">
+        <div class="loading-box">
+          <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
+          <div>正在載入儀表板資料...</div>
+        </div>
+      </div>
+
       <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <h3 class="mb-0">家族辦公室級資產戰情儀表板</h3>
-        <div class="d-flex gap-2">
-          <button class="btn btn-outline-light" @click="refreshAll">重新整理</button>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <span class="status-pill">
+            <span :class="['status-dot', (isRefreshing || backgroundRefreshInProgress) ? 'busy' : '']"></span>
+            {{ (isRefreshing || backgroundRefreshInProgress) ? '同步中' : '系統就緒' }}
+          </span>
+          <span class="status-pill" v-if="lastRefreshAt">最後更新 {{ lastRefreshAt }}</span>
+          <button class="btn btn-outline-light" @click="refreshAll" :disabled="isRefreshing">
+            {{ isRefreshing ? '更新中...' : '重新整理' }}
+          </button>
         </div>
       </div>
 
@@ -461,19 +615,19 @@
         <li class="nav-item" role="presentation">
           <button
             class="nav-link"
-            :class="{ active: currentPage === 'settings' }"
-            @click="currentPage = 'settings'"
+            :class="{ active: currentPage === 'dividends' }"
+            @click="currentPage = 'dividends'"
           >
-            參數設定
+            股利明細
           </button>
         </li>
         <li class="nav-item" role="presentation">
           <button
             class="nav-link"
-            :class="{ active: currentPage === 'dividends' }"
-            @click="currentPage = 'dividends'"
+            :class="{ active: currentPage === 'settings' }"
+            @click="currentPage = 'settings'"
           >
-            股利明細
+            參數設定
           </button>
         </li>
       </ul>
@@ -482,8 +636,8 @@
       <div v-show="currentPage === 'overview'">
         <div class="row g-3 mb-3">
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.05s">
-            <div class="label">總淨值</div>
-            <div class="value">{{ fmt(summary.net_assets) }}</div>
+            <div class="label">庫存總市值</div>
+            <div class="value">{{ fmt(overviewNetWorth) }}</div>
           </div>
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.12s">
             <div class="label">總預估股息</div>
@@ -529,7 +683,13 @@
             <div class="glass table-shell">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h5 class="mb-0">標的明細</h5>
-                <span class="badge rounded-pill badge-soft">{{ performance.items.length }} 檔</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge rounded-pill badge-soft">{{ filteredPerformanceItems.length }} 檔</span>
+                  <label class="form-check-label small" style="color: var(--text-dim)">
+                    <input class="form-check-input me-1" type="checkbox" v-model="overviewFilter.only_active_holdings" />
+                    只看目前有庫存
+                  </label>
+                </div>
               </div>
               <div class="table-scroll">
                 <table class="table table-hover align-middle">
@@ -546,7 +706,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in performance.items" :key="row.stock_id">
+                    <tr v-for="row in filteredPerformanceItems" :key="row.stock_id">
                       <td>{{ row.stock_id }}</td>
                       <td>{{ row.chinese_name }}</td>
                       <td>{{ fmt(row.market_value) }}</td>
@@ -579,7 +739,15 @@
             <div class="glass table-shell">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h5 class="mb-0">所有交易紀錄</h5>
-                <span class="badge rounded-pill badge-soft">{{ allTransactions.items.length }} 筆</span>
+                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                  <span class="badge rounded-pill badge-soft">{{ allTransactions.items.length }} 筆</span>
+                  <button class="btn btn-sm btn-neon" @click="refreshTransactionPrices('filtered')">
+                    只更新目前篩選代號
+                  </button>
+                  <button class="btn btn-sm btn-outline-info" @click="refreshTransactionPrices('all')">
+                    更新全部交易代號
+                  </button>
+                </div>
               </div>
               
               <div class="filter-row">
@@ -604,6 +772,12 @@
                   <button class="btn btn-sm btn-neon" @click="openAddTxModal">新增交易明細</button>
                   <button class="btn btn-sm btn-neon" @click="applyTxFilter">篩選</button>
                   <button class="btn btn-sm btn-outline-light" @click="clearTxFilter">清除</button>
+                </div>
+                <div class="filter-group" style="min-width: 180px">
+                  <label class="form-check-label small" style="color: var(--text-dim)">
+                    <input class="form-check-input me-1" type="checkbox" v-model="txFilter.only_active_holdings" />
+                    只看目前有庫存
+                  </label>
                 </div>
               </div>
 
@@ -667,6 +841,50 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <div class="mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0">公司行為明細（配股 / 減資）</h6>
+                  <span class="badge rounded-pill badge-soft">{{ transactionCorporateActions.length }} 筆</span>
+                </div>
+                <div class="table-scroll" style="max-height: 220px">
+                  <table class="table table-hover align-middle">
+                    <thead>
+                      <tr>
+                        <th>日期</th>
+                        <th>證券</th>
+                        <th>類型</th>
+                        <th>股數變動</th>
+                        <th>說明</th>
+                        <th>來源</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="row in transactionCorporateActions" :key="`ca-${row.key}`">
+                        <td>{{ row.date }}</td>
+                        <td>
+                          <div>{{ row.stock_id }}</div>
+                          <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                        </td>
+                        <td>
+                          <span class="source-badge" :class="row.type === '減資' ? 'backup' : 'official'">{{ row.type }}</span>
+                        </td>
+                        <td>{{ row.share_delta.toLocaleString() }}</td>
+                        <td>{{ row.note }}</td>
+                        <td>
+                          <span class="source-badge" :class="dividendSourceMeta(row.source).className">
+                            {{ dividendSourceMeta(row.source).label }}
+                          </span>
+                          <span class="source-badge-text">{{ row.source }}</span>
+                        </td>
+                      </tr>
+                      <tr v-if="!transactionCorporateActions.length">
+                        <td colspan="6" class="text-center" style="color: var(--text-dim)">目前沒有配股/減資事件</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -742,6 +960,54 @@
                 <div v-if="repairStockInfoMessage" class="mt-2 small" style="color: var(--text-dim)">
                   {{ repairStockInfoMessage }}
                 </div>
+
+                <hr style="border-color: var(--line)" />
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
+                    <div class="setting-panel-title">資料健檢</div>
+                    <div class="setting-panel-subtitle">檢查缺價、超賣、孤兒庫存與漏計公司行為（深度模式）。</div>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-outline-light" @click="runDataHealthCheck(false)" :disabled="healthCheckLoading">
+                      {{ healthCheckLoading ? '健檢中...' : '快速健檢' }}
+                    </button>
+                    <button class="btn btn-outline-info" @click="runDataHealthCheck(true)" :disabled="healthCheckLoading">
+                      {{ healthCheckLoading ? '健檢中...' : '深度健檢' }}
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="healthCheckReport" class="glass-light p-3 mt-2">
+                  <div class="d-flex flex-wrap gap-2 mb-2">
+                    <span class="badge rounded-pill badge-soft">檢查時間 {{ healthCheckReport.checked_at }}</span>
+                    <span class="badge rounded-pill badge-soft">有庫存標的 {{ healthCheckReport.active_holding_count }}</span>
+                    <span class="badge rounded-pill" :class="healthCheckReport.issue_count > 0 ? 'text-bg-warning' : 'text-bg-success'">
+                      問題數 {{ healthCheckReport.issue_count }}
+                    </span>
+                  </div>
+                  <div class="small" style="color: var(--text-dim)">
+                    缺價 {{ (healthCheckReport.issues?.missing_prices || []).length }}，
+                    超賣 {{ (healthCheckReport.issues?.oversell_transactions || []).length }}，
+                    孤兒庫存 {{ (healthCheckReport.issues?.orphan_holdings || []).length }}，
+                    漏計公司行為 {{ (healthCheckReport.issues?.missing_stock_events || []).length }}
+                  </div>
+                </div>
+
+                <hr style="border-color: var(--line)" />
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
+                    <div class="setting-panel-title">資料庫備份</div>
+                    <div class="setting-panel-subtitle">一鍵建立 `wealth.db` 快照到 `backups/` 目錄。</div>
+                  </div>
+                  <button class="btn btn-outline-success" @click="backupDatabase" :disabled="backupLoading">
+                    {{ backupLoading ? '備份中...' : '立即備份資料庫' }}
+                  </button>
+                </div>
+                <div v-if="backupInfo" class="small" style="color: var(--text-dim)">
+                  最新備份：{{ backupInfo.backup_file }}（{{ backupInfo.created_at }}）
+                </div>
               </div>
             </div>
           </div>
@@ -755,7 +1021,12 @@
             <div class="glass table-shell">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <h5 class="mb-0">現金股利明細</h5>
-                <span class="badge rounded-pill badge-soft">{{ filteredDividends.length }} 筆</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge rounded-pill badge-soft">{{ filteredDividends.length }} 筆</span>
+                  <button class="btn btn-sm btn-outline-info" @click="refreshDividendSync" :disabled="dividendSyncLoading">
+                    {{ dividendSyncLoading ? '重抓中...' : '重新抓取並重算' }}
+                  </button>
+                </div>
               </div>
 
               <div class="filter-row">
@@ -787,6 +1058,9 @@
                 <span class="badge rounded-pill badge-soft">篩選金額總計 {{ fmt(dividendSummary.totalCash) }}</span>
                 <span class="badge rounded-pill badge-soft">篩選股數總計 {{ dividendSummary.totalShares.toLocaleString() }}</span>
               </div>
+              <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.75rem">
+                來源若未提供發放日，系統會暫以除息日代替，並標示為暫代資料。
+              </div>
 
               <div class="table-scroll">
                 <table class="table table-hover align-middle">
@@ -810,11 +1084,19 @@
                         <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
                       </td>
                       <td>{{ row.ex_date }}</td>
-                      <td>{{ row.pay_date }}</td>
-                      <td>{{ fmtPrice(row.amount_per_share) }}</td>
+                      <td>
+                        <div>{{ row.pay_date }}</div>
+                        <div v-if="isDividendPayDateFallback(row)" style="font-size: 0.75rem; color: var(--text-dim)">來源未提供，暫用除息日</div>
+                      </td>
+                      <td>{{ fmtPrice3(row.amount_per_share) }}</td>
                       <td>{{ row.holding_shares.toLocaleString() }}</td>
                       <td>{{ fmt(row.cash_amount) }}</td>
-                      <td>{{ row.source }}</td>
+                      <td>
+                        <span class="source-badge" :class="dividendSourceMeta(row.source).className">
+                          {{ dividendSourceMeta(row.source).label }}
+                        </span>
+                        <span class="source-badge-text">{{ row.source }}</span>
+                      </td>
                       <td>{{ row.note }}</td>
                       <td>
                         <button class="btn btn-sm btn-outline-danger" @click="deleteDividend(row.id)">刪除</button>
@@ -860,11 +1142,19 @@
                         <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
                       </td>
                       <td>{{ row.ex_date }}</td>
-                      <td>{{ row.allot_date }}</td>
+                      <td>
+                        <div>{{ row.allot_date }}</div>
+                        <div v-if="isStockDividendDateFallback(row)" style="font-size: 0.75rem; color: var(--text-dim)">來源未提供，暫用除權日</div>
+                      </td>
                       <td>{{ row.ratio }}</td>
                       <td>{{ row.holding_shares.toLocaleString() }}</td>
                       <td>{{ row.bonus_shares.toLocaleString() }}</td>
-                      <td>{{ row.source }}</td>
+                      <td>
+                        <span class="source-badge" :class="dividendSourceMeta(row.source).className">
+                          {{ dividendSourceMeta(row.source).label }}
+                        </span>
+                        <span class="source-badge-text">{{ row.source }}</span>
+                      </td>
                       <td>{{ row.note }}</td>
                       <td>
                         <button class="btn btn-sm btn-outline-danger" @click="deleteStockDividend(row.id)">刪除</button>
@@ -1078,14 +1368,38 @@
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">動作</label>
-                  <select v-model="txForm.action" class="form-select">
-                    <option value="buy">買</option>
-                    <option value="sell">賣</option>
+                  <div class="btn-group w-100" role="group" aria-label="買賣切換">
+                    <button
+                      type="button"
+                      class="btn"
+                      :class="txForm.action === 'buy' ? 'action-toggle buy active' : 'action-toggle buy'"
+                      @click="txForm.action = 'buy'"
+                    >
+                      買
+                    </button>
+                    <button
+                      type="button"
+                      class="btn"
+                      :class="txForm.action === 'sell' ? 'action-toggle sell active' : 'action-toggle sell'"
+                      @click="txForm.action = 'sell'"
+                    >
+                      賣
+                    </button>
+                  </div>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">交易單位</label>
+                  <select v-model="txForm.trade_unit" class="form-select">
+                    <option value="lot">整股（1 = 1張）</option>
+                    <option value="odd">零股（1~999股）</option>
                   </select>
                 </div>
                 <div class="col-md-4">
-                  <label class="form-label">股數</label>
-                  <input v-model.number="txForm.shares" type="number" min="0" step="0.01" class="form-control" />
+                  <label class="form-label">數量</label>
+                  <input v-model.number="txForm.trade_qty" type="number" min="0" step="1" class="form-control" />
+                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">
+                    換算股數：{{ Number(txForm.shares || 0).toLocaleString() }} 股
+                  </div>
                 </div>
                 <div class="col-md-4">
                   <label class="form-label">單價</label>
@@ -1147,6 +1461,7 @@
                 <div class="col-6">
                   <label class="form-label">發放日</label>
                   <input v-model="dividendForm.pay_date" type="date" class="form-control" />
+                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">若來源未提供，可留空，系統會暫用除息日。</div>
                 </div>
                 <div class="col-6">
                   <label class="form-label">每股配息</label>
@@ -1196,6 +1511,7 @@
                 <div class="col-6">
                   <label class="form-label">入帳日</label>
                   <input v-model="stockDividendForm.allot_date" type="date" class="form-control" />
+                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">若來源未提供，可留空，系統會暫用除權日。</div>
                 </div>
                 <div class="col-6">
                   <label class="form-label">配股比率（每 1 股）</label>
@@ -1422,6 +1738,8 @@
               date: new Date().toISOString().slice(0, 10),
               stock_id: "",
               action: "buy",
+              trade_unit: "lot",
+              trade_qty: 0,
               shares: 0,
               price: 0,
               fees: 0,
@@ -1464,7 +1782,21 @@
               stock_id: "",
               date_from: "",
               date_to: "",
+              only_active_holdings: false,
             },
+            overviewFilter: {
+              only_active_holdings: false,
+            },
+            txPriceRefreshMode: "filtered",
+            dividendSyncLoading: false,
+            backgroundRefreshInProgress: false,
+            isRefreshing: false,
+            isInitialLoading: true,
+            lastRefreshAt: "",
+            healthCheckLoading: false,
+            healthCheckReport: null,
+            backupLoading: false,
+            backupInfo: null,
             allDividends: { items: [] },
             allStockDividends: { items: [] },
             dividendFilter: {
@@ -1475,7 +1807,7 @@
             dividendForm: {
               stock_id: "",
               ex_date: new Date().toISOString().slice(0, 10),
-              pay_date: new Date().toISOString().slice(0, 10),
+              pay_date: "",
               amount_per_share: 0,
               holding_shares: null,
               source: "manual",
@@ -1484,7 +1816,7 @@
             stockDividendForm: {
               stock_id: "",
               ex_date: new Date().toISOString().slice(0, 10),
-              allot_date: new Date().toISOString().slice(0, 10),
+              allot_date: "",
               ratio: 0,
               holding_shares: null,
               bonus_shares: null,
@@ -1509,6 +1841,11 @@
               realized_profit: this.performance.totals.realized_profit || 0,
             };
           },
+          overviewNetWorth() {
+            return (this.performance.items || [])
+              .filter((row) => Number(row.shares || 0) > 0)
+              .reduce((acc, row) => acc + Number(row.market_value || 0), 0);
+          },
           stockOptions() {
             const map = new Map();
 
@@ -1532,6 +1869,19 @@
 
             return Array.from(map.values()).sort((a, b) => a.stock_id.localeCompare(b.stock_id));
           },
+          activeHoldingStockIds() {
+            const ids = new Set();
+            for (const row of this.performance.items || []) {
+              if (!row || !row.stock_id) continue;
+              if (Number(row.shares || 0) > 0) ids.add(row.stock_id);
+            }
+            return ids;
+          },
+          filteredPerformanceItems() {
+            const rows = this.performance.items || [];
+            if (!this.overviewFilter.only_active_holdings) return rows;
+            return rows.filter((row) => Number(row.shares || 0) > 0);
+          },
           selectedStockName() {
             if (!this.txForm.stock_id) return "";
             const hit = this.stockOptions.find((x) => x.stock_id === this.txForm.stock_id);
@@ -1551,15 +1901,52 @@
             return "";
           },
           filteredTransactions() {
-            if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to) {
+            if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to && !this.txFilter.only_active_holdings) {
               return this.allTransactions.items;
             }
             return this.allTransactions.items.filter(tx => {
               if (this.txFilter.stock_id && tx.stock_id !== this.txFilter.stock_id) return false;
               if (this.txFilter.date_from && tx.date < this.txFilter.date_from) return false;
               if (this.txFilter.date_to && tx.date > this.txFilter.date_to) return false;
+              if (this.txFilter.only_active_holdings && !this.activeHoldingStockIds.has(tx.stock_id)) return false;
               return true;
             });
+          },
+          transactionCorporateActions() {
+            const names = new Map((this.stockOptions || []).map((x) => [x.stock_id, x.chinese_name || x.stock_id]));
+            const rows = [];
+
+            for (const item of this.allStockDividends.items || []) {
+              const sid = item.stock_id;
+              if (!sid) continue;
+              if (this.txFilter.stock_id && sid !== this.txFilter.stock_id) continue;
+              if (this.txFilter.date_from && item.allot_date < this.txFilter.date_from) continue;
+              if (this.txFilter.date_to && item.allot_date > this.txFilter.date_to) continue;
+              if (this.txFilter.only_active_holdings && !this.activeHoldingStockIds.has(sid)) continue;
+
+              rows.push({
+                key: `${item.id || "stock"}-${sid}-${item.allot_date}-${item.ex_date}`,
+                date: item.allot_date || item.ex_date,
+                stock_id: sid,
+                chinese_name: names.get(sid) || sid,
+                type: Number(item.bonus_shares || 0) < 0 ? "減資" : "配股",
+                share_delta: Number(item.bonus_shares || 0),
+                note: `${Number(item.bonus_shares || 0) < 0 ? "減資" : "配股"}比率 ${Number(item.ratio || 0).toFixed(4)}`,
+                source: item.source || "manual",
+              });
+            }
+
+            return rows.sort((a, b) => {
+              if (a.date === b.date) return a.stock_id.localeCompare(b.stock_id);
+              return a.date > b.date ? -1 : 1;
+            });
+          },
+          filteredTransactionStockIds() {
+            const ids = new Set();
+            for (const tx of this.filteredTransactions || []) {
+              if (tx.stock_id) ids.add(tx.stock_id);
+            }
+            return Array.from(ids).sort((a, b) => a.localeCompare(b));
           },
           filteredLoans() {
             if (!this.loanFilter.lender && !this.loanFilter.date_from && !this.loanFilter.date_to) {
@@ -1639,8 +2026,45 @@
           actionLabel(action) {
             return action === "buy" ? "買" : "賣";
           },
+          isDividendPayDateFallback(row) {
+            return String(row.source || "").includes("yahoo_auto") && row.pay_date === row.ex_date;
+          },
+          isStockDividendDateFallback(row) {
+            return String(row.source || "").includes("yahoo_split_auto") && row.allot_date === row.ex_date;
+          },
+          dividendSourceMeta(source) {
+            const value = String(source || "").toLowerCase();
+            if (value.startsWith("mops_") || value.startsWith("twse_")) {
+              return { label: "官方", className: "official" };
+            }
+            if (value.startsWith("yahoo_")) {
+              return { label: "備援", className: "backup" };
+            }
+            if (value === "manual") {
+              return { label: "手動", className: "manual" };
+            }
+            return { label: "其他", className: "unknown" };
+          },
           normalizeStockId(value) {
             return String(value || "").trim().toUpperCase();
+          },
+          syncSharesFromTradeInput() {
+            const qty = Math.max(0, Number(this.txForm.trade_qty || 0));
+            if (this.txForm.trade_unit === "odd") {
+              this.txForm.shares = Math.floor(qty);
+              return;
+            }
+            this.txForm.shares = Math.floor(qty) * 1000;
+          },
+          syncTradeInputFromShares() {
+            const shares = Math.max(0, Number(this.txForm.shares || 0));
+            if (shares > 0 && Number.isInteger(shares) && shares % 1000 === 0) {
+              this.txForm.trade_unit = "lot";
+              this.txForm.trade_qty = shares / 1000;
+              return;
+            }
+            this.txForm.trade_unit = "odd";
+            this.txForm.trade_qty = shares;
           },
           estimateFee() {
             if (this.txForm.fee_mode !== "auto") return;
@@ -1707,6 +2131,19 @@
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             }).format(num);
+          },
+          fmtPrice3(v) {
+            const num = Number(v || 0);
+            return new Intl.NumberFormat("zh-TW", {
+              style: "currency",
+              currency: "TWD",
+              minimumFractionDigits: 3,
+              maximumFractionDigits: 3,
+            }).format(num);
+          },
+          fmtDateTime(d = new Date()) {
+            const pad = (n) => String(n).padStart(2, "0");
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
           },
           async fetchJson(url, options) {
             const res = await fetch(url, options);
@@ -1807,6 +2244,9 @@
           openAddTxModal() {
             this.showAddTxModal = true;
             this.txError = "";
+            this.txForm.trade_unit = "lot";
+            this.txForm.trade_qty = 0;
+            this.txForm.shares = 0;
             if (this.txFilter.stock_id) {
               this.txForm.stock_id = this.txFilter.stock_id;
               this.onStockChange();
@@ -1818,7 +2258,7 @@
             this.dividendForm = {
               stock_id: "",
               ex_date: new Date().toISOString().slice(0, 10),
-              pay_date: new Date().toISOString().slice(0, 10),
+              pay_date: "",
               amount_per_share: 0,
               holding_shares: null,
               source: "manual",
@@ -1831,7 +2271,7 @@
             this.stockDividendForm = {
               stock_id: "",
               ex_date: new Date().toISOString().slice(0, 10),
-              allot_date: new Date().toISOString().slice(0, 10),
+              allot_date: "",
               ratio: 0,
               holding_shares: null,
               bonus_shares: null,
@@ -1916,21 +2356,50 @@
               alert(`刪除失敗: ${err.message || err}`);
             }
           },
-          async refreshAll() {
+          async refreshTransactionPrices(mode) {
+            this.txPriceRefreshMode = mode === "all" ? "all" : "filtered";
+            await this.refreshAll();
+          },
+          async refreshDividendSync() {
+            this.dividendSyncLoading = true;
             try {
-              try {
-                const syncResp = await this.fetchJson("/api/dividends/auto-sync", { method: "POST" });
-                this.dividendSyncSummary = {
-                  last_sync_date: syncResp.last_sync_date || "",
-                  processed_stocks: Number(syncResp.processed_stocks || 0),
-                  inserted_cash_dividends: Number(syncResp.inserted_cash_dividends || 0),
-                  inserted_stock_dividends: Number(syncResp.inserted_stock_dividends || 0),
-                  stock_details: Array.isArray(syncResp.stock_details) ? syncResp.stock_details : [],
-                };
-              } catch (syncErr) {
-                console.warn("auto-sync dividends skipped", syncErr);
-              }
-
+              await this.fetchJson("/api/dividends/auto-sync?force=true&years=2", { method: "POST" });
+              await this.refreshAll();
+              this.showToast("股利資料已重新抓取並重算。", "success", 3500);
+            } catch (err) {
+              this.showToast(`股利重新抓取失敗: ${err.message || err}`, "error", 4500);
+            } finally {
+              this.dividendSyncLoading = false;
+            }
+          },
+          async runDataHealthCheck(deep = false) {
+            this.healthCheckLoading = true;
+            try {
+              const resp = await this.fetchJson(`/api/system/data-health?deep=${deep ? "true" : "false"}&max_stocks=120`);
+              this.healthCheckReport = resp;
+              const issueCount = Number(resp.issue_count || 0);
+              this.showToast(issueCount > 0 ? `健檢完成：發現 ${issueCount} 項問題` : "健檢完成：未發現問題", issueCount > 0 ? "warning" : "success", 4200);
+            } catch (err) {
+              this.showToast(`資料健檢失敗: ${err.message || err}`, "error", 5000);
+            } finally {
+              this.healthCheckLoading = false;
+            }
+          },
+          async backupDatabase() {
+            this.backupLoading = true;
+            try {
+              const resp = await this.fetchJson("/api/system/backup-db", { method: "POST" });
+              this.backupInfo = resp;
+              this.showToast(`備份完成：${resp.backup_file}`, "success", 4200);
+            } catch (err) {
+              this.showToast(`資料庫備份失敗: ${err.message || err}`, "error", 5000);
+            } finally {
+              this.backupLoading = false;
+            }
+          },
+          async refreshAll(runBackground = true) {
+            this.isRefreshing = true;
+            try {
               const [summary, performance, allocation, expected, loans, allTx, allLoans, taxSettingsResp, allDividends, allStockDividends] = await Promise.all([
                 this.fetchJson("/api/portfolio/summary"),
                 this.fetchJson("/api/portfolio/performance"),
@@ -1963,9 +2432,73 @@
               };
 
               this.renderCharts();
+              this.lastRefreshAt = this.fmtDateTime();
+
+              if (runBackground) {
+                this.runBackgroundRefresh();
+              }
             } catch (err) {
               console.error(err);
               this.chatMessages.push({ role: "ai", content: "讀取 API 失敗，請確認後端已啟動。" });
+            } finally {
+              this.isRefreshing = false;
+              this.isInitialLoading = false;
+            }
+          },
+          async runBackgroundRefresh() {
+            if (this.backgroundRefreshInProgress) return;
+            this.backgroundRefreshInProgress = true;
+            try {
+              try {
+                const refreshUrl = this.txPriceRefreshMode === "filtered" && this.filteredTransactionStockIds.length
+                  ? `/api/stock/refresh-prices?limit=5000&stock_ids=${encodeURIComponent(this.filteredTransactionStockIds.join(","))}`
+                  : "/api/stock/refresh-prices?scope=transactions&limit=5000";
+                await this.fetchJson(refreshUrl, { method: "POST" });
+              } catch (priceErr) {
+                console.warn("background refresh prices skipped", priceErr);
+              }
+
+              try {
+                const syncResp = await this.fetchJson("/api/dividends/auto-sync", { method: "POST" });
+                this.dividendSyncSummary = {
+                  last_sync_date: syncResp.last_sync_date || "",
+                  processed_stocks: Number(syncResp.processed_stocks || 0),
+                  inserted_cash_dividends: Number(syncResp.inserted_cash_dividends || 0),
+                  inserted_stock_dividends: Number(syncResp.inserted_stock_dividends || 0),
+                  stock_details: Array.isArray(syncResp.stock_details) ? syncResp.stock_details : [],
+                };
+              } catch (syncErr) {
+                console.warn("background auto-sync dividends skipped", syncErr);
+              }
+
+              const [summary, performance, allocation, expected, loans, allTx, allLoans, allDividends, allStockDividends] = await Promise.all([
+                this.fetchJson("/api/portfolio/summary"),
+                this.fetchJson("/api/portfolio/performance"),
+                this.fetchJson("/api/portfolio/allocation"),
+                this.fetchJson("/api/portfolio/expected-dividends"),
+                this.fetchJson("/api/loans/health"),
+                this.fetchJson("/api/transactions?limit=5000"),
+                this.fetchJson("/api/loans/list"),
+                this.fetchJson("/api/dividends/cash?limit=5000"),
+                this.fetchJson("/api/dividends/stock?limit=5000"),
+              ]);
+
+              this.summary = summary;
+              this.performance = performance;
+              this.allocation = allocation;
+              this.expected = expected;
+              this.loans = loans;
+              this.allTransactions = allTx;
+              this.loansList = allLoans;
+              this.allDividends = allDividends;
+              this.allStockDividends = allStockDividends;
+              this.lastRefreshAt = this.fmtDateTime();
+
+              this.renderCharts();
+            } catch (err) {
+              console.warn("background refresh failed", err);
+            } finally {
+              this.backgroundRefreshInProgress = false;
             }
           },
           renderCharts() {
@@ -2083,12 +2616,15 @@
               date: tx.date,
               stock_id: tx.stock_id,
               action: tx.action,
+              trade_unit: "lot",
+              trade_qty: 0,
               shares: tx.shares,
               price: tx.price,
               fees: tx.fees,
               fee_mode: "manual",
               is_dca: false,
             };
+            this.syncTradeInputFromShares();
             this.showAddTxModal = true;
           },
           closeAddTxModal() {
@@ -2099,6 +2635,8 @@
               date: new Date().toISOString().slice(0, 10),
               stock_id: "",
               action: "buy",
+              trade_unit: "lot",
+              trade_qty: 0,
               shares: 0,
               price: 0,
               fees: 0,
@@ -2118,6 +2656,21 @@
                 this.txError = "請先選擇證券代號";
                 return;
               }
+
+              if (this.txForm.trade_unit === "lot") {
+                if (!Number.isInteger(Number(this.txForm.trade_qty)) || Number(this.txForm.trade_qty) <= 0) {
+                  this.txError = "整股請輸入大於 0 的整數（1 代表 1 張）";
+                  return;
+                }
+              } else {
+                const odd = Number(this.txForm.trade_qty);
+                if (!Number.isInteger(odd) || odd < 1 || odd > 999) {
+                  this.txError = "零股請輸入 1~999 的整數股數";
+                  return;
+                }
+              }
+
+              this.syncSharesFromTradeInput();
 
               const payload = {
                 date: this.txForm.date,
@@ -2160,7 +2713,7 @@
             // Just trigger the computed property update
           },
           clearTxFilter() {
-            this.txFilter = { stock_id: "", date_from: "", date_to: "" };
+            this.txFilter = { stock_id: "", date_from: "", date_to: "", only_active_holdings: false };
           },
           applyLoanFilter() {
             // Just trigger the computed property update
@@ -2193,6 +2746,14 @@
           },
         },
         watch: {
+          "txForm.trade_qty"() {
+            this.syncSharesFromTradeInput();
+            this.estimateFee();
+          },
+          "txForm.trade_unit"() {
+            this.syncSharesFromTradeInput();
+            this.estimateFee();
+          },
           "txForm.shares"() {
             this.estimateFee();
           },
