@@ -92,6 +92,13 @@
         letter-spacing: 0.2px;
       }
 
+      .kpi-note {
+        margin-top: 0.28rem;
+        font-size: 0.76rem;
+        color: var(--text-dim);
+        line-height: 1.35;
+      }
+
       .danger-text {
         color: var(--danger) !important;
         text-shadow: 0 0 12px rgba(255, 107, 107, 0.33);
@@ -679,16 +686,25 @@
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.12s">
             <div class="label">總預估股息</div>
             <div class="value">{{ fmt(expected.total_expected_dividend) }}</div>
+            <div class="kpi-note">
+              今年排程 {{ fmt(expectedBreakdown.current_year_schedule_total) }} / 殖利率估算 {{ fmt(expectedBreakdown.yield_estimate_total) }}
+            </div>
           </div>
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.19s">
-            <div class="label">總已實現獲利</div>
+            <div class="label" title="交易已實現淨利，已扣除手續費與交易稅，不含股息。">總已實現淨利 (交易，已扣費稅)</div>
             <div class="value">{{ fmt(performanceTotals.realized_profit) }}</div>
+            <div class="kpi-note">不含股息，已扣手續費與交易稅</div>
           </div>
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.26s">
+            <div class="label" title="已實現交易淨利加上已領股息；交易手續費與交易稅已計入。">總已實現淨利 (含股息，已扣費稅)</div>
+            <div class="value">{{ fmt(performanceTotals.realized_with_dividends) }}</div>
+            <div class="kpi-note">= 已實現交易損益 + 已領股息，交易成本已內含</div>
+          </div>
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.33s">
             <div class="label">目前維持率</div>
             <div class="value" :class="maintainClass">{{ maintenanceLabel }}</div>
           </div>
-          <div class="col-12 col-xl kpi-card glass" style="animation-delay: 0.33s">
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.4s">
             <div class="label">應繳利息</div>
             <div class="value danger-text">{{ fmt(loans.total_accrued_interest) }}</div>
           </div>
@@ -734,10 +750,13 @@
                     <tr>
                       <th>代號</th>
                       <th>中文名稱</th>
+                      <th>市價</th>
+                      <th>每股成本</th>
                       <th>市值</th>
-                      <th>未實現</th>
-                      <th>已實現</th>
+                      <th title="目前庫存的未實現損益；買進手續費已反映在成本。">未實現</th>
+                      <th title="交易已實現淨利，已扣除手續費與交易稅。">已實現淨利</th>
                       <th>已領股息</th>
+                      <th title="公式：已實現淨利 + 已領股息 + 未實現；費用與交易稅已內含。">累計淨損益</th>
                       <th>股數</th>
                       <th>操作</th>
                     </tr>
@@ -746,6 +765,8 @@
                     <tr v-for="row in filteredPerformanceItems" :key="row.stock_id">
                       <td>{{ row.stock_id }}</td>
                       <td>{{ row.chinese_name }}</td>
+                      <td>{{ fmtPrice(row.current_price) }}</td>
+                      <td>{{ fmtPrice(row.avg_cost_per_share) }}</td>
                       <td>{{ fmt(row.market_value) }}</td>
                       <td :class="row.unrealized_profit >= 0 ? 'status-safe' : 'status-danger'">
                         {{ fmt(row.unrealized_profit) }}
@@ -754,6 +775,9 @@
                         {{ fmt(row.realized_profit) }}
                       </td>
                       <td>{{ fmt(row.dividends_received) }}</td>
+                      <td :class="calcTotalProfitIncludingCosts(row) >= 0 ? 'status-safe' : 'status-danger'">
+                        {{ fmt(calcTotalProfitIncludingCosts(row)) }}
+                      </td>
                       <td>{{ row.shares.toLocaleString() }}</td>
                       <td>
                         <button class="btn btn-sm btn-outline-light" @click="viewStockDetail(row.stock_id)">
@@ -1459,6 +1483,12 @@
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">每股成本</div>
+                    <div style="font-weight: 600">{{ fmtPrice(selectedStock.avg_cost_per_share) }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
                     <div style="font-size: 0.8rem; color: var(--text-dim)">市值</div>
                     <div style="font-weight: 600">{{ fmt(selectedStock.market_value) }}</div>
                   </div>
@@ -1483,6 +1513,14 @@
                   <div class="glass-light p-2">
                     <div style="font-size: 0.8rem; color: var(--text-dim)">已領股息</div>
                     <div style="font-weight: 600">{{ fmt(selectedStock.dividends_received) }}</div>
+                  </div>
+                </div>
+                <div class="col-6">
+                  <div class="glass-light p-2">
+                    <div style="font-size: 0.8rem; color: var(--text-dim)">已實現損益 (含股息)</div>
+                    <div :class="selectedStock.realized_with_dividends >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                      {{ fmt(selectedStock.realized_with_dividends) }}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1938,7 +1976,14 @@
             summary: { total_assets: 0, total_liabilities: 0, net_assets: 0 },
             performance: { items: [], totals: {} },
             allocation: { asset_type: [], sector: [] },
-            expected: { items: [], total_expected_dividend: 0 },
+            expected: {
+              items: [],
+              total_expected_dividend: 0,
+              breakdown: {
+                current_year_schedule_total: 0,
+                yield_estimate_total: 0,
+              },
+            },
             loans: {
               maintenance_rate: null,
               status: "無資料",
@@ -2092,6 +2137,15 @@
           performanceTotals() {
             return {
               realized_profit: this.performance.totals.realized_profit || 0,
+              dividends_received: this.performance.totals.dividends_received || 0,
+              realized_with_dividends: this.performance.totals.realized_with_dividends || 0,
+              total_profit_including_dividends: this.performance.totals.total_profit_including_dividends || 0,
+            };
+          },
+          expectedBreakdown() {
+            return {
+              current_year_schedule_total: Number(this.expected?.breakdown?.current_year_schedule_total || 0),
+              yield_estimate_total: Number(this.expected?.breakdown?.yield_estimate_total || 0),
             };
           },
           overviewNetWorth() {
@@ -2501,6 +2555,12 @@
               minimumFractionDigits: 3,
               maximumFractionDigits: 3,
             }).format(num);
+          },
+          calcTotalProfitIncludingCosts(row) {
+            const realized = Number(row?.realized_profit || 0);
+            const dividends = Number(row?.dividends_received || 0);
+            const unrealized = Number(row?.unrealized_profit || 0);
+            return realized + dividends + unrealized;
           },
           fmtDateTime(d = new Date()) {
             const pad = (n) => String(n).padStart(2, "0");

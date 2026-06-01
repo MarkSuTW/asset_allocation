@@ -115,6 +115,9 @@ class StockDividendCreate(BaseModel):
     ratio: float
     holding_shares: Optional[float] = Field(default=None, ge=0)
     bonus_shares: Optional[float] = None
+    event_type: str = Field(default="stock_dividend")
+    cash_return_per_share: float = Field(default=0, ge=0)
+    cash_return_amount: Optional[float] = Field(default=None, ge=0)
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -125,6 +128,9 @@ class StockDividendUpdate(BaseModel):
     ratio: float
     holding_shares: float = Field(ge=0)
     bonus_shares: float
+    event_type: str = Field(default="stock_dividend")
+    cash_return_per_share: float = Field(default=0, ge=0)
+    cash_return_amount: float = Field(default=0, ge=0)
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -310,6 +316,68 @@ def compute_stock_event_settlement(holding_shares: float, ratio: float) -> Dict[
         base_shares = float(math.floor(max(holding_shares, 0.0) / 1000.0) * 1000)
     delta = float(int(base_shares * ratio))
     return {"base_shares": base_shares, "share_delta": delta}
+
+
+def infer_stock_event_type(ratio: float, cash_return_per_share: float = 0.0, explicit_event_type: Optional[str] = None) -> str:
+    explicit = str(explicit_event_type or "").strip().lower()
+    if explicit in {"stock_dividend", "capital_reduction_cash", "capital_reduction_other"}:
+        return explicit
+    if float(ratio) < -1e-9:
+        return "capital_reduction_cash" if float(cash_return_per_share or 0.0) > 1e-9 else "capital_reduction_other"
+    return "stock_dividend"
+
+
+def apply_stock_event_to_lots(
+    lots: deque,
+    bonus_shares: float,
+    event_type: str = "stock_dividend",
+    cash_return_amount: float = 0.0,
+) -> None:
+    if abs(float(bonus_shares)) <= 1e-9:
+        return
+
+    current_inventory = sum(float(lot["shares"]) for lot in lots)
+    if current_inventory <= 1e-9:
+        return
+
+    if bonus_shares > 0:
+        lots.append(
+            {
+                "buy_tx_id": None,
+                "shares": float(bonus_shares),
+                "unit_cost": 0.0,
+            }
+        )
+        return
+
+    target_inventory = max(current_inventory + float(bonus_shares), 0.0)
+    if target_inventory <= 1e-9:
+        lots.clear()
+        return
+
+    lot_costs = [float(lot["shares"]) * float(lot["unit_cost"]) for lot in lots]
+    total_cost = sum(lot_costs)
+    if (
+        infer_stock_event_type(float(bonus_shares), 0.0, event_type) == "capital_reduction_cash"
+        and total_cost > 1e-9
+        and float(cash_return_amount or 0.0) > 1e-9
+    ):
+        reduced_total_cost = max(total_cost - min(float(cash_return_amount), total_cost), 0.0)
+        reduce_factor = reduced_total_cost / total_cost if total_cost > 0 else 1.0
+        lot_costs = [c * reduce_factor for c in lot_costs]
+
+    share_factor = target_inventory / current_inventory if current_inventory > 0 else 0.0
+    for idx, lot in enumerate(lots):
+        new_shares = max(float(lot["shares"]) * share_factor, 0.0)
+        new_cost = float(lot_costs[idx]) if idx < len(lot_costs) else 0.0
+        lot["shares"] = new_shares
+        lot["unit_cost"] = (new_cost / new_shares) if new_shares > 1e-9 else 0.0
+
+    while lots and float(lots[0]["shares"]) <= 1e-9:
+        lots.popleft()
+    for idx in range(len(lots) - 1, -1, -1):
+        if float(lots[idx]["shares"]) <= 1e-9:
+            del lots[idx]
 
 
 def get_nhi_settings(conn: sqlite3.Connection) -> Dict[str, float]:
@@ -618,11 +686,32 @@ def ensure_runtime_schema(conn: sqlite3.Connection) -> None:
             ratio REAL NOT NULL DEFAULT 0,
             holding_shares REAL NOT NULL DEFAULT 0,
             bonus_shares REAL NOT NULL DEFAULT 0,
+            event_type TEXT NOT NULL DEFAULT 'stock_dividend',
+            cash_return_per_share REAL NOT NULL DEFAULT 0,
+            cash_return_amount REAL NOT NULL DEFAULT 0,
             source TEXT NOT NULL DEFAULT 'manual',
             note TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY (stock_id) REFERENCES stock_info(stock_id)
         )
+        """
+    )
+    stock_div_cols = conn.execute("PRAGMA table_info(stock_dividends)").fetchall()
+    stock_div_col_names = {str(c[1]).lower() for c in stock_div_cols}
+    if "event_type" not in stock_div_col_names:
+        conn.execute("ALTER TABLE stock_dividends ADD COLUMN event_type TEXT NOT NULL DEFAULT 'stock_dividend'")
+    if "cash_return_per_share" not in stock_div_col_names:
+        conn.execute("ALTER TABLE stock_dividends ADD COLUMN cash_return_per_share REAL NOT NULL DEFAULT 0")
+    if "cash_return_amount" not in stock_div_col_names:
+        conn.execute("ALTER TABLE stock_dividends ADD COLUMN cash_return_amount REAL NOT NULL DEFAULT 0")
+    conn.execute(
+        """
+        UPDATE stock_dividends
+        SET event_type = CASE
+            WHEN COALESCE(ratio, 0) < 0 THEN 'capital_reduction_other'
+            ELSE 'stock_dividend'
+        END
+        WHERE TRIM(COALESCE(event_type, '')) = '' OR event_type = 'stock_dividend'
         """
     )
     conn.execute(
@@ -996,6 +1085,20 @@ def _extract_mops_detail_stock_event(detail_result: Dict[str, Any], announcement
     if ratio is None or abs(ratio) <= 1e-9:
         return None
 
+    cash_return_per_share = 0.0
+    cash_per_share_match = re.search(r"每(?:壹|一)股(?:退還|返還|退回)(?:現金|股款)?\s*([0-9]+(?:\.[0-9]+)?)\s*元", joined)
+    if cash_per_share_match:
+        cash_return_per_share = float(cash_per_share_match.group(1))
+    else:
+        cash_per_thousand_match = re.search(r"每(?:壹仟|一千|千)股(?:退還|返還|退回)(?:現金|股款)?\s*([0-9]+(?:\.[0-9]+)?)\s*元", joined)
+        if cash_per_thousand_match:
+            cash_return_per_share = float(cash_per_thousand_match.group(1)) / 1000.0
+
+    has_cash_reduction_hint = bool(re.search(r"現金減資|退還股款|返還股款|退回股款|退還現金", joined))
+    event_type = "stock_dividend"
+    if ratio < -1e-9:
+        event_type = "capital_reduction_cash" if (cash_return_per_share > 1e-9 or has_cash_reduction_hint) else "capital_reduction_other"
+
     ex_match = re.search(r"減資換發股票基準日[:：]\s*(\d+年\s*\d+月\s*\d+日)", joined)
     if not ex_match:
         ex_match = re.search(r"權利分派基準日[:：]\s*(\d+年\s*\d+月\s*\d+日)", joined)
@@ -1007,6 +1110,8 @@ def _extract_mops_detail_stock_event(detail_result: Dict[str, Any], announcement
         "ex_date": ex_date,
         "allot_date": ex_date,
         "ratio": round(float(ratio), 6),
+        "event_type": event_type,
+        "cash_return_per_share": round(float(cash_return_per_share), 6),
         "source": "mops_capital_reduction_auto",
         "source_label": "MOPS 減資公告",
     }
@@ -1313,20 +1418,28 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
 
     merged_stock_events: Dict[tuple, Dict[str, Any]] = {}
     for event in yahoo_events.get("stock") or []:
+        ratio = float(event["ratio"])
+        event_type = infer_stock_event_type(ratio, float(event.get("cash_return_per_share") or 0.0), event.get("event_type"))
         key = (event["ex_date"], round(float(event["ratio"]), 6))
         merged_stock_events[key] = {
             "ex_date": event["ex_date"],
             "allot_date": event.get("allot_date") or event["ex_date"],
-            "ratio": float(event["ratio"]),
+            "ratio": ratio,
+            "event_type": event_type,
+            "cash_return_per_share": round(float(event.get("cash_return_per_share") or 0.0), 6),
             "source": str(event.get("source") or "yahoo_split_auto"),
         }
 
     for event in mops_reduction_events.get("stock") or []:
+        ratio = float(event["ratio"])
+        event_type = infer_stock_event_type(ratio, float(event.get("cash_return_per_share") or 0.0), event.get("event_type"))
         key = (event["ex_date"], round(float(event["ratio"]), 6))
         merged_stock_events[key] = {
             "ex_date": event["ex_date"],
             "allot_date": event.get("allot_date") or event["ex_date"],
-            "ratio": float(event["ratio"]),
+            "ratio": ratio,
+            "event_type": event_type,
+            "cash_return_per_share": round(float(event.get("cash_return_per_share") or 0.0), 6),
             "source": str(event.get("source") or "mops_capital_reduction_auto"),
         }
 
@@ -1418,14 +1531,60 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
     for row in duplicated_yahoo_rows:
         conn.execute("DELETE FROM cash_dividends WHERE id = ?", (int(row["id"]),))
 
+        # Treat near-date Yahoo vs official rows in the same year as duplicate representations
+        # of the same dividend event (common one-day shift from source timezone differences).
+        near_date_duplicated_yahoo_rows = conn.execute(
+                """
+                SELECT y.id
+                FROM cash_dividends y
+                WHERE y.stock_id = ?
+                    AND y.source = 'yahoo_auto'
+                    AND EXISTS (
+                            SELECT 1
+                            FROM cash_dividends o
+                            WHERE o.stock_id = y.stock_id
+                                AND o.id <> y.id
+                                AND o.source <> 'yahoo_auto'
+                                AND SUBSTR(o.ex_date, 1, 4) = SUBSTR(y.ex_date, 1, 4)
+                                AND ABS(julianday(o.ex_date) - julianday(y.ex_date)) <= 10
+                    )
+                """,
+                (sid,),
+        ).fetchall()
+        for row in near_date_duplicated_yahoo_rows:
+                conn.execute("DELETE FROM cash_dividends WHERE id = ?", (int(row["id"]),))
+
+        # Yahoo split/capital-reduction artifacts may appear as fake cash dividends on the same
+        # ex-date as a negative stock event; remove those cash rows.
+        reduction_artifact_rows = conn.execute(
+                """
+                SELECT y.id
+                FROM cash_dividends y
+                WHERE y.stock_id = ?
+                    AND y.source = 'yahoo_auto'
+                    AND EXISTS (
+                            SELECT 1
+                            FROM stock_dividends s
+                            WHERE s.stock_id = y.stock_id
+                                AND s.ex_date = y.ex_date
+                                AND COALESCE(s.ratio, 0) < 0
+                    )
+                """,
+                (sid,),
+        ).fetchall()
+        for row in reduction_artifact_rows:
+            conn.execute("DELETE FROM cash_dividends WHERE id = ?", (int(row["id"]),))
+
     for event in stock_source_events:
         ex_date = event["ex_date"]
         allot_date = normalize_date(event.get("allot_date") or ex_date)
         ratio = float(event["ratio"])
+        cash_return_per_share = round(float(event.get("cash_return_per_share") or 0.0), 6)
+        event_type = infer_stock_event_type(ratio, cash_return_per_share, event.get("event_type"))
         source_name = str(event.get("source") or "yahoo_split_auto")
         exists = conn.execute(
             """
-            SELECT id, allot_date, holding_shares, bonus_shares, source
+            SELECT id, allot_date, holding_shares, bonus_shares, event_type, cash_return_per_share, cash_return_amount, source
             FROM stock_dividends
             WHERE stock_id = ? AND ex_date = ? AND ABS(ratio - ?) < 0.000001
             LIMIT 1
@@ -1448,6 +1607,7 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
         settlement = compute_stock_event_settlement(holding_shares, ratio)
         base_holding_shares = float(settlement["base_shares"])
         bonus_shares = float(settlement["share_delta"])
+        cash_return_amount = round(base_holding_shares * cash_return_per_share, 2) if event_type == "capital_reduction_cash" else 0.0
         if abs(bonus_shares) <= 1e-9:
             continue
         if bonus_shares < 0 and holding_shares + bonus_shares < 0:
@@ -1458,19 +1618,25 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
                 normalize_date(exists["allot_date"] or ex_date) != allot_date
                 or abs(float(exists["holding_shares"] or 0.0) - base_holding_shares) > 1e-9
                 or abs(float(exists["bonus_shares"] or 0.0) - bonus_shares) > 1e-9
+                or str(exists["event_type"] or "stock_dividend") != event_type
+                or abs(float(exists["cash_return_per_share"] or 0.0) - cash_return_per_share) > 1e-9
+                or abs(float(exists["cash_return_amount"] or 0.0) - cash_return_amount) > 1e-6
                 or str(exists["source"] or "") != source_name
             )
             if needs_update:
                 conn.execute(
                     """
                     UPDATE stock_dividends
-                    SET allot_date = ?, holding_shares = ?, bonus_shares = ?, source = ?, note = ?
+                    SET allot_date = ?, holding_shares = ?, bonus_shares = ?, event_type = ?, cash_return_per_share = ?, cash_return_amount = ?, source = ?, note = ?
                     WHERE id = ?
                     """,
                     (
                         allot_date,
                         base_holding_shares,
                         bonus_shares,
+                        event_type,
+                        cash_return_per_share,
+                        cash_return_amount,
                         source_name,
                         "auto synced from market",
                         int(exists["id"]),
@@ -1481,8 +1647,8 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
 
         conn.execute(
             """
-            INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, source, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, event_type, cash_return_per_share, cash_return_amount, source, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -1491,6 +1657,9 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
                 ratio,
                 base_holding_shares,
                 bonus_shares,
+                event_type,
+                cash_return_per_share,
+                cash_return_amount,
                 source_name,
                 "auto synced from market",
             ),
@@ -2137,7 +2306,7 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
         "SELECT id, date, stock_id, action, shares, price, fees, transaction_tax FROM transactions ORDER BY date, id"
     ).fetchall()
     div_rows = conn.execute(
-        "SELECT id, allot_date, stock_id, bonus_shares FROM stock_dividends ORDER BY allot_date, id"
+        "SELECT id, allot_date, stock_id, bonus_shares, event_type, cash_return_amount FROM stock_dividends ORDER BY allot_date, id"
     ).fetchall()
 
     events: List[Dict[str, Any]] = []
@@ -2151,39 +2320,17 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
     tax_settings = get_transaction_tax_settings(conn)
     conn.execute("DELETE FROM holdings")
 
-    def apply_stock_dividend_to_lots(lots: deque, bonus_shares: float) -> None:
-        if abs(bonus_shares) <= 1e-9:
-            return
-        current_inventory = sum(lot["shares"] for lot in lots)
-        if current_inventory <= 1e-9:
-            return
-
-        if bonus_shares > 0:
-            lots.append(
-                {
-                    "buy_tx_id": None,
-                    "shares": bonus_shares,
-                    "unit_cost": 0.0,
-                }
-            )
-            return
-
-        target_inventory = max(current_inventory + bonus_shares, 0.0)
-        factor = target_inventory / current_inventory if current_inventory > 0 else 0.0
-        for lot in lots:
-            lot["shares"] = max(float(lot["shares"]) * factor, 0.0)
-        while lots and float(lots[0]["shares"]) <= 1e-9:
-            lots.popleft()
-        for idx in range(len(lots) - 1, -1, -1):
-            if float(lots[idx]["shares"]) <= 1e-9:
-                del lots[idx]
-
     for event in events:
         if event["kind"] == "stock_div":
             r = event["row"]
             sid = normalize_stock_id(r["stock_id"])
             bonus_shares = float(r["bonus_shares"])
-            apply_stock_dividend_to_lots(lots_by_stock[sid], bonus_shares)
+            apply_stock_event_to_lots(
+                lots_by_stock[sid],
+                bonus_shares,
+                event_type=str(r["event_type"] or "stock_dividend"),
+                cash_return_amount=float(r["cash_return_amount"] or 0.0),
+            )
             continue
 
         r = event["row"]
@@ -2257,7 +2404,7 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
         "SELECT id, date, stock_id, action, shares, price, fees, transaction_tax FROM transactions ORDER BY date, id"
     ).fetchall()
     div_rows = conn.execute(
-        "SELECT id, allot_date, stock_id, bonus_shares FROM stock_dividends ORDER BY allot_date, id"
+        "SELECT id, allot_date, stock_id, bonus_shares, event_type, cash_return_amount FROM stock_dividends ORDER BY allot_date, id"
     ).fetchall()
 
     events: List[Dict[str, Any]] = []
@@ -2274,39 +2421,17 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
     realized_totals: Dict[str, float] = defaultdict(float)
     metrics_by_tx: Dict[int, Dict[str, Any]] = {}
 
-    def apply_stock_dividend_to_lots(lots: deque, bonus_shares: float) -> None:
-        if abs(bonus_shares) <= 1e-9:
-            return
-        current_inventory = sum(lot["shares"] for lot in lots)
-        if current_inventory <= 1e-9:
-            return
-
-        if bonus_shares > 0:
-            lots.append(
-                {
-                    "buy_tx_id": None,
-                    "shares": bonus_shares,
-                    "unit_cost": 0.0,
-                }
-            )
-            return
-
-        target_inventory = max(current_inventory + bonus_shares, 0.0)
-        factor = target_inventory / current_inventory if current_inventory > 0 else 0.0
-        for lot in lots:
-            lot["shares"] = max(float(lot["shares"]) * factor, 0.0)
-        while lots and float(lots[0]["shares"]) <= 1e-9:
-            lots.popleft()
-        for idx in range(len(lots) - 1, -1, -1):
-            if float(lots[idx]["shares"]) <= 1e-9:
-                del lots[idx]
-
     for event in events:
         if event["kind"] == "stock_div":
             r = event["row"]
             sid = normalize_stock_id(r["stock_id"])
             bonus_shares = float(r["bonus_shares"])
-            apply_stock_dividend_to_lots(lots_by_stock[sid], bonus_shares)
+            apply_stock_event_to_lots(
+                lots_by_stock[sid],
+                bonus_shares,
+                event_type=str(r["event_type"] or "stock_dividend"),
+                cash_return_amount=float(r["cash_return_amount"] or 0.0),
+            )
             continue
 
         r = event["row"]
@@ -2460,17 +2585,23 @@ def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         bonus_shares = get_bonus_shares_sum(conn, stock_id)
 
         unrealized = market_value - total_cost
+        avg_cost_per_share = (total_cost / shares) if shares > 1e-9 else 0.0
+        realized_with_dividends = float(realized) + float(dividend)
+        total_profit_including_dividends = realized_with_dividends + unrealized
 
         items.append(
             {
                 "stock_id": stock_id,
                 "chinese_name": chinese_name,
                 "current_price": round(float(current_price), 2),
+                "avg_cost_per_share": round(float(avg_cost_per_share), 4),
                 "realized_profit": round(float(realized), 2),
+                "realized_with_dividends": round(float(realized_with_dividends), 2),
                 "dividends_received": round(float(dividend), 2),
                 "bonus_shares_received": round(float(bonus_shares), 4),
                 "market_value": round(float(market_value), 2),
                 "unrealized_profit": round(float(unrealized), 2),
+                "total_profit_including_dividends": round(float(total_profit_including_dividends), 2),
                 "shares": round(float(shares), 4),
             }
         )
@@ -2479,10 +2610,12 @@ def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         "items": items,
         "totals": {
             "realized_profit": round(sum(i["realized_profit"] for i in items), 2),
+            "realized_with_dividends": round(sum(i["realized_with_dividends"] for i in items), 2),
             "dividends_received": round(sum(i["dividends_received"] for i in items), 2),
             "bonus_shares_received": round(sum(i["bonus_shares_received"] for i in items), 4),
             "market_value": round(sum(i["market_value"] for i in items), 2),
             "unrealized_profit": round(sum(i["unrealized_profit"] for i in items), 2),
+            "total_profit_including_dividends": round(sum(i["total_profit_including_dividends"] for i in items), 2),
         },
     }
 
@@ -2546,6 +2679,10 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
     ).fetchall()
 
     result = []
+    breakdown = {
+        "current_year_schedule_total": 0.0,
+        "yield_estimate_total": 0.0,
+    }
     nhi = get_nhi_settings(conn)
     for row in rows:
         stock_id = row["stock_id"]
@@ -2572,16 +2709,29 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         if estimate <= 0:
             estimate = market_value * y
 
+        method = "current_year_schedule" if float(current_year_estimate) > 0 else "yield_estimate"
+        if method == "current_year_schedule":
+            breakdown["current_year_schedule_total"] += float(estimate)
+        else:
+            breakdown["yield_estimate_total"] += float(estimate)
+
         result.append(
             {
                 "stock_id": stock_id,
                 "expected_dividend": round(estimate, 2),
-                "method": "current_year_schedule" if float(current_year_estimate) > 0 else "yield_estimate",
+                "method": method,
             }
         )
 
     total = round(sum(r["expected_dividend"] for r in result), 2)
-    return {"items": result, "total_expected_dividend": total}
+    return {
+        "items": result,
+        "total_expected_dividend": total,
+        "breakdown": {
+            "current_year_schedule_total": round(float(breakdown["current_year_schedule_total"]), 2),
+            "yield_estimate_total": round(float(breakdown["yield_estimate_total"]), 2),
+        },
+    }
 
 
 def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
@@ -3374,8 +3524,8 @@ def list_stock_dividends(
         rows = conn.execute(
             f"""
             SELECT d.id, d.stock_id, COALESCE(s.chinese_name, d.stock_id) AS chinese_name,
-                   d.ex_date, d.allot_date, d.ratio, d.holding_shares,
-                   d.bonus_shares, d.source, d.note
+                 d.ex_date, d.allot_date, d.ratio, d.holding_shares,
+                 d.bonus_shares, d.event_type, d.cash_return_per_share, d.cash_return_amount, d.source, d.note
             FROM stock_dividends d
             LEFT JOIN stock_info s ON s.stock_id = d.stock_id
             {where_sql}
@@ -3395,6 +3545,9 @@ def list_stock_dividends(
             "ratio": float(r["ratio"]),
             "holding_shares": float(r["holding_shares"]),
             "bonus_shares": float(r["bonus_shares"]),
+            "event_type": str(r["event_type"] or "stock_dividend"),
+            "cash_return_per_share": float(r["cash_return_per_share"] or 0.0),
+            "cash_return_amount": float(r["cash_return_amount"] or 0.0),
             "source": r["source"],
             "note": r["note"],
         }
@@ -3418,11 +3571,18 @@ def create_stock_dividend(payload: StockDividendCreate) -> Dict[str, Any]:
             settlement = compute_stock_event_settlement(holding_shares, float(payload.ratio))
             holding_shares = float(settlement["base_shares"])
             bonus_shares = float(settlement["share_delta"])
+        cash_return_per_share = round(float(payload.cash_return_per_share or 0.0), 6)
+        event_type = infer_stock_event_type(float(payload.ratio), cash_return_per_share, payload.event_type)
+        cash_return_amount = (
+            float(payload.cash_return_amount)
+            if payload.cash_return_amount is not None
+            else (round(holding_shares * cash_return_per_share, 2) if event_type == "capital_reduction_cash" else 0.0)
+        )
 
         cur = conn.execute(
             """
-            INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, source, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, event_type, cash_return_per_share, cash_return_amount, source, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sid,
@@ -3431,6 +3591,9 @@ def create_stock_dividend(payload: StockDividendCreate) -> Dict[str, Any]:
                 float(payload.ratio),
                 holding_shares,
                 bonus_shares,
+                event_type,
+                cash_return_per_share,
+                cash_return_amount,
                 (payload.source or "manual").strip() or "manual",
                 payload.note or "",
             ),
@@ -3445,6 +3608,9 @@ def create_stock_dividend(payload: StockDividendCreate) -> Dict[str, Any]:
 def update_stock_dividend(dividend_id: int, payload: StockDividendUpdate) -> Dict[str, Any]:
     ex_date = normalize_date(payload.ex_date)
     allot_date = normalize_date(payload.allot_date) if payload.allot_date else ex_date
+    cash_return_per_share = round(float(payload.cash_return_per_share or 0.0), 6)
+    event_type = infer_stock_event_type(float(payload.ratio), cash_return_per_share, payload.event_type)
+    cash_return_amount = float(payload.cash_return_amount or 0.0)
     with get_conn() as conn:
         exists = conn.execute("SELECT id FROM stock_dividends WHERE id = ?", (dividend_id,)).fetchone()
         if not exists:
@@ -3453,7 +3619,7 @@ def update_stock_dividend(dividend_id: int, payload: StockDividendUpdate) -> Dic
         conn.execute(
             """
             UPDATE stock_dividends
-            SET ex_date = ?, allot_date = ?, ratio = ?, holding_shares = ?, bonus_shares = ?, source = ?, note = ?
+            SET ex_date = ?, allot_date = ?, ratio = ?, holding_shares = ?, bonus_shares = ?, event_type = ?, cash_return_per_share = ?, cash_return_amount = ?, source = ?, note = ?
             WHERE id = ?
             """,
             (
@@ -3462,6 +3628,9 @@ def update_stock_dividend(dividend_id: int, payload: StockDividendUpdate) -> Dic
                 float(payload.ratio),
                 float(payload.holding_shares),
                 float(payload.bonus_shares),
+                event_type,
+                cash_return_per_share,
+                cash_return_amount,
                 (payload.source or "manual").strip() or "manual",
                 payload.note or "",
                 dividend_id,
@@ -3807,6 +3976,8 @@ def get_stock_detail(stock_id: str) -> Dict[str, Any]:
         ).fetchone()["v"]
         dividend = get_cash_dividend_sum(conn, stock_id)
         bonus_shares = get_bonus_shares_sum(conn, stock_id)
+        avg_cost_per_share = (total_cost / shares) if shares > 1e-9 else 0.0
+        realized_with_dividends = float(realized) + float(dividend)
 
         transactions = conn.execute(
             """
@@ -3892,9 +4063,11 @@ def get_stock_detail(stock_id: str) -> Dict[str, Any]:
             "shares": round(shares, 4),
             "total_cost": round(total_cost, 2),
             "current_price": round(current_price, 2),
+            "avg_cost_per_share": round(avg_cost_per_share, 4),
             "market_value": round(market_value, 2),
             "unrealized_profit": round(market_value - total_cost, 2),
             "realized_profit": round(float(realized), 2),
+            "realized_with_dividends": round(realized_with_dividends, 2),
             "dividends_received": round(float(dividend), 2),
             "bonus_shares_received": round(float(bonus_shares), 4),
             "yearly_dividends": yearly_dividends,
