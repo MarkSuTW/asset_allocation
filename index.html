@@ -148,20 +148,17 @@
         border-spacing: 0;
       }
 
-      .table thead {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-      }
-
       .table thead th {
         color: var(--text-dim);
         font-weight: 500;
         border-bottom-width: 1px;
-        background: rgba(0, 0, 0, 0.4);
+        background: rgba(10, 18, 38, 0.96);
         padding: 0.8rem;
-        position: relative;
+        position: sticky;
+        top: 0;
+        z-index: 30;
         white-space: nowrap;
+        box-shadow: inset 0 -1px 0 var(--line);
       }
 
       .table tbody tr:hover {
@@ -171,6 +168,46 @@
 
       .table tbody tr:hover td {
         color: var(--text-main) !important;
+      }
+
+      .timeline-row-corporate {
+        background: rgba(79, 125, 255, 0.09);
+      }
+
+      .timeline-row-transaction {
+        background: rgba(255, 255, 255, 0.02);
+      }
+
+      .timeline-toggle-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.25rem;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: rgba(5, 8, 15, 0.45);
+      }
+
+      .timeline-toggle {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--text-dim);
+        padding: 0.22rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        transition: all 0.18s ease;
+      }
+
+      .timeline-toggle:hover {
+        color: var(--text-main);
+        border-color: rgba(79, 125, 255, 0.4);
+      }
+
+      .timeline-toggle.active {
+        color: #e8eeff;
+        background: linear-gradient(120deg, rgba(0, 208, 255, 0.22), rgba(79, 125, 255, 0.32));
+        border-color: rgba(79, 125, 255, 0.6);
+        box-shadow: 0 0 12px rgba(79, 125, 255, 0.24);
       }
 
       .badge-soft {
@@ -749,6 +786,9 @@
                   </button>
                 </div>
               </div>
+              <div class="small mb-2" style="color: var(--text-dim)">
+                以上兩個按鈕只會更新交易標的的最新市價（用於未實現損益與報酬率計算），不會改動交易紀錄本身。
+              </div>
               
               <div class="filter-row">
                 <div class="filter-group">
@@ -773,12 +813,6 @@
                   <button class="btn btn-sm btn-neon" @click="applyTxFilter">篩選</button>
                   <button class="btn btn-sm btn-outline-light" @click="clearTxFilter">清除</button>
                 </div>
-                <div class="filter-group" style="min-width: 180px">
-                  <label class="form-check-label small" style="color: var(--text-dim)">
-                    <input class="form-check-input me-1" type="checkbox" v-model="txFilter.only_active_holdings" />
-                    只看目前有庫存
-                  </label>
-                </div>
               </div>
 
               <div class="d-flex flex-wrap gap-2 mb-2">
@@ -788,6 +822,7 @@
                 <span class="badge rounded-pill badge-soft">實現損益總計 {{ fmt(txSummary.totalRealized) }}</span>
                 <span class="badge rounded-pill badge-soft">未實現損益總計 {{ fmt(txSummary.totalUnrealized) }}</span>
                 <span class="badge rounded-pill badge-soft">目前庫存股數 {{ txSummary.endingInventory.toLocaleString() }}</span>
+                <span class="badge rounded-pill badge-soft">{{ txMarketReference.label }}</span>
               </div>
 
               <div class="table-scroll">
@@ -799,7 +834,6 @@
                       <th>動作</th>
                       <th>股數</th>
                       <th>單價</th>
-                      <th>市價</th>
                       <th>手續費</th>
                       <th>交易稅</th>
                       <th>實現損益</th>
@@ -821,7 +855,6 @@
                       </td>
                       <td>{{ tx.shares.toLocaleString() }}</td>
                       <td>{{ fmtPrice(tx.price) }}</td>
-                      <td>{{ fmtPrice(tx.current_price) }}</td>
                       <td>{{ fmt(tx.fees) }}</td>
                       <td>{{ fmt(tx.transaction_tax) }}</td>
                       <td :class="tx.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
@@ -844,9 +877,23 @@
               </div>
 
               <div class="mt-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <h6 class="mb-0">交易/股務事件時間軸</h6>
-                  <span class="badge rounded-pill badge-soft">{{ transactionTimelineRows.length }} 筆</span>
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                  <h6 class="mb-0">股務/配息事件時間軸</h6>
+                  <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                    <span class="badge rounded-pill badge-soft">{{ filteredTransactionTimelineRows.length }} 筆</span>
+                  </div>
+                </div>
+                <div class="mb-2" style="color: var(--text-dim)">
+                  <label class="form-check-label small">
+                    <input class="form-check-input me-1" type="checkbox" v-model="txTimelineFilter.only_cash_with_holdings" />
+                    只顯示有持股的配息事件
+                  </label>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                  <span class="badge rounded-pill badge-soft">配息事件 {{ timelineStats.cashCount }} 筆</span>
+                  <span class="badge rounded-pill badge-soft">股息加總 {{ fmt(timelineStats.cashTotal) }}</span>
+                  <span class="badge rounded-pill badge-soft">股務事件 {{ timelineStats.stockActionCount }} 筆</span>
+                  <span class="badge rounded-pill badge-soft">淨股數變動 {{ timelineStats.netShareDelta.toLocaleString() }}</span>
                 </div>
                 <div class="table-scroll" style="max-height: 220px">
                   <table class="table table-hover align-middle">
@@ -855,13 +902,18 @@
                         <th>日期</th>
                         <th>證券</th>
                         <th>事件類型</th>
+                        <th>當下持股</th>
                         <th>股數變動</th>
                         <th>內容</th>
                         <th>來源/價格</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="row in transactionTimelineRows" :key="`timeline-${row.key}`">
+                      <tr
+                        v-for="row in filteredTransactionTimelineRows"
+                        :key="`timeline-${row.key}`"
+                        :class="row.isCorporate ? 'timeline-row-corporate' : 'timeline-row-transaction'"
+                      >
                         <td>{{ row.date }}</td>
                         <td>
                           <div>{{ row.stock_id }}</div>
@@ -870,6 +922,7 @@
                         <td>
                           <span class="source-badge" :class="row.typeClass">{{ row.typeLabel }}</span>
                         </td>
+                        <td>{{ row.holding_shares.toLocaleString() }}</td>
                         <td>{{ row.share_delta.toLocaleString() }}</td>
                         <td>{{ row.note }}</td>
                         <td>
@@ -879,8 +932,8 @@
                           <span class="source-badge-text">{{ row.metaText }}</span>
                         </td>
                       </tr>
-                      <tr v-if="!transactionTimelineRows.length">
-                        <td colspan="6" class="text-center" style="color: var(--text-dim)">目前沒有交易或股務事件</td>
+                      <tr v-if="!filteredTransactionTimelineRows.length">
+                        <td colspan="7" class="text-center" style="color: var(--text-dim)">目前沒有股務或配息事件</td>
                       </tr>
                     </tbody>
                   </table>
@@ -932,6 +985,32 @@
                 <div class="d-flex justify-content-end mt-3">
                   <button class="btn btn-outline-light" @click="saveTaxSettings" :disabled="taxSettingsSaving">
                     {{ taxSettingsSaving ? '儲存中...' : '儲存交易稅設定' }}
+                  </button>
+                </div>
+
+                <hr style="border-color: var(--line)" />
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
+                    <div class="setting-panel-title">二代健保（股利）設定</div>
+                    <div class="setting-panel-subtitle">調整後即時生效於股利實領金額，不需調整資料庫結構。</div>
+                  </div>
+                </div>
+
+                <div class="row g-2 align-items-end">
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">費率 (%)</label>
+                    <input v-model.number="nhiSettings.nhi_supplement_rate_pct" type="number" min="0" step="0.0001" class="form-control form-control-sm" />
+                  </div>
+                  <div class="col-12 col-md-6 col-xl-4">
+                    <label class="form-label mb-1">扣取門檻 (TWD)</label>
+                    <input v-model.number="nhiSettings.nhi_supplement_threshold" type="number" min="0" step="1" class="form-control form-control-sm" />
+                  </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-3">
+                  <button class="btn btn-outline-light" @click="saveNhiSettings" :disabled="nhiSettingsSaving">
+                    {{ nhiSettingsSaving ? '儲存中...' : '儲存二代健保設定' }}
                   </button>
                 </div>
 
@@ -998,6 +1077,108 @@
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                   <div>
+                    <div class="setting-panel-title">全股票股利重算與差異報表</div>
+                    <div class="setting-panel-subtitle">可追蹤每檔進度、成功/失敗清單，完成後顯示重算前後股利差異。</div>
+                  </div>
+                  <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div>
+                      <label class="form-label mb-1" style="font-size: 0.78rem">回溯年數</label>
+                      <input v-model.number="dividendRecalcYears" type="number" min="1" max="30" step="1" class="form-control form-control-sm" style="width: 100px" />
+                    </div>
+                    <div>
+                      <label class="form-label mb-1" style="font-size: 0.78rem">差異起算年</label>
+                      <input v-model.number="dividendRecalcStartYear" type="number" min="1900" max="2100" step="1" class="form-control form-control-sm" style="width: 110px" />
+                    </div>
+                    <button class="btn btn-outline-info" @click="startDividendRecalcJob" :disabled="dividendRecalc.status === 'queued' || dividendRecalc.status === 'running'">
+                      {{ (dividendRecalc.status === 'queued' || dividendRecalc.status === 'running') ? '重算進行中...' : '啟動全股票重算' }}
+                    </button>
+                    <button class="btn btn-outline-danger" @click="cancelDividendRecalcJob" :disabled="!(dividendRecalc.status === 'queued' || dividendRecalc.status === 'running')">
+                      中斷重算工作
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="dividendRecalc.job_id" class="glass-light p-3 mt-2">
+                  <div class="d-flex flex-wrap gap-2 mb-2">
+                    <span class="badge rounded-pill badge-soft">工作 ID {{ dividendRecalc.job_id }}</span>
+                    <span class="badge rounded-pill badge-soft">狀態 {{ dividendRecalc.status }}</span>
+                    <span class="badge rounded-pill badge-soft">進度 {{ Number(dividendRecalc.progress_pct || 0).toFixed(2) }}%</span>
+                    <span class="badge rounded-pill badge-soft">成功 {{ dividendRecalc.success_count || 0 }}</span>
+                    <span class="badge rounded-pill badge-soft">失敗 {{ dividendRecalc.failed_count || 0 }}</span>
+                    <span v-if="dividendRecalc.current_stock_id" class="badge rounded-pill badge-soft">目前 {{ dividendRecalc.current_stock_id }}</span>
+                  </div>
+
+                  <div class="progress" style="height: 10px; background: rgba(255,255,255,0.08)">
+                    <div class="progress-bar bg-info" role="progressbar" :style="{ width: `${Math.max(0, Math.min(100, Number(dividendRecalc.progress_pct || 0)))}%` }"></div>
+                  </div>
+
+                  <div class="small mt-2" style="color: var(--text-dim)">
+                    已處理 {{ dividendRecalc.processed_stocks || 0 }} / {{ dividendRecalc.total_stocks || 0 }} 檔
+                    <span v-if="dividendRecalc.finished_at">，完成於 {{ dividendRecalc.finished_at }}</span>
+                  </div>
+
+                  <div class="mt-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="fw-semibold">全股票股利差異報表（{{ dividendRecalc.diff_report?.start_year || dividendRecalcStartYear }} 起）</div>
+                    <button class="btn btn-sm btn-outline-light" @click="showDividendDiffReport = !showDividendDiffReport">
+                      {{ showDividendDiffReport ? '收合明細' : '展開明細' }}
+                    </button>
+                  </div>
+
+                  <div class="small" style="color: var(--text-dim)">
+                    差異檔數 {{ dividendRecalc.diff_report?.changed_count || 0 }}，顯示前 {{ (dividendRecalc.diff_report?.top_changes || []).length }} 檔
+                  </div>
+
+                  <div v-if="showDividendDiffReport" class="table-scroll mt-2" style="max-height: 280px">
+                    <table class="table table-sm table-hover align-middle">
+                      <thead>
+                        <tr>
+                          <th>代號</th>
+                          <th>名稱</th>
+                          <th>重算前</th>
+                          <th>重算後</th>
+                          <th>差異</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="row in (dividendRecalc.diff_report?.top_changes || [])" :key="`diff-${row.stock_id}`">
+                          <td>{{ row.stock_id }}</td>
+                          <td>{{ row.chinese_name }}</td>
+                          <td>{{ fmt(row.before_cash_dividend) }}</td>
+                          <td>{{ fmt(row.after_cash_dividend) }}</td>
+                          <td :class="row.delta_cash_dividend >= 0 ? 'status-safe' : 'status-danger'">{{ fmt(row.delta_cash_dividend) }}</td>
+                        </tr>
+                        <tr v-if="!(dividendRecalc.diff_report?.top_changes || []).length">
+                          <td colspan="5" class="text-center" style="color: var(--text-dim)">目前沒有差異資料</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div v-if="(dividendRecalc.failed_stocks || []).length" class="mt-3">
+                    <div class="fw-semibold mb-1">失敗清單（{{ (dividendRecalc.failed_stocks || []).length }}）</div>
+                    <div class="table-scroll" style="max-height: 180px">
+                      <table class="table table-sm table-hover align-middle">
+                        <thead>
+                          <tr>
+                            <th>代號</th>
+                            <th>錯誤</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(row, idx) in (dividendRecalc.failed_stocks || [])" :key="`failed-${idx}-${row.stock_id}`">
+                            <td>{{ row.stock_id }}</td>
+                            <td>{{ row.error }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                <hr style="border-color: var(--line)" />
+
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                  <div>
                     <div class="setting-panel-title">資料庫備份</div>
                     <div class="setting-panel-subtitle">可本地快照，或上傳至 Google Drive（需先設定服務帳號）。</div>
                   </div>
@@ -1033,6 +1214,10 @@
                     {{ dividendSyncLoading ? '重抓中...' : '重新抓取並重算' }}
                   </button>
                 </div>
+              </div>
+
+              <div class="small mb-2" style="color: var(--text-dim)">
+                僅顯示目前有庫存標的，且預設只顯示今年資料；若需看過去年份，請調整開始/結束日期。
               </div>
 
               <div class="filter-row">
@@ -1077,7 +1262,9 @@
                       <th>發放日</th>
                       <th>每股配息</th>
                       <th>基準持股</th>
-                      <th>現金股利</th>
+                      <th>股利毛額</th>
+                      <th>二代健保</th>
+                      <th>實領股利</th>
                       <th>來源</th>
                       <th>備註</th>
                       <th>操作</th>
@@ -1096,6 +1283,8 @@
                       </td>
                       <td>{{ fmtPrice3(row.amount_per_share) }}</td>
                       <td>{{ row.holding_shares.toLocaleString() }}</td>
+                      <td>{{ fmt(row.cash_amount_gross) }}</td>
+                      <td>{{ fmt(row.nhi_premium) }}</td>
                       <td>{{ fmt(row.cash_amount) }}</td>
                       <td>
                         <span class="source-badge" :class="dividendSourceMeta(row.source).className">
@@ -1334,6 +1523,33 @@
                           刪
                         </button>
                       </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h6 class="mb-2 mt-3">持有期間每年實際股利/股息</h6>
+              <div class="table-scroll" style="max-height: 220px">
+                <table class="table table-sm table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>年度</th>
+                      <th>現金股利</th>
+                      <th>現金事件數</th>
+                      <th>股票股利(股)</th>
+                      <th>股票事件數</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in (selectedStock.yearly_dividends || [])" :key="`yearly-${row.year}`">
+                      <td>{{ row.year }}</td>
+                      <td>{{ fmt(row.cash_dividend) }}</td>
+                      <td>{{ row.cash_event_count }}</td>
+                      <td>{{ Number(row.stock_dividend_shares || 0).toLocaleString() }}</td>
+                      <td>{{ row.stock_event_count }}</td>
+                    </tr>
+                    <tr v-if="!(selectedStock.yearly_dividends || []).length">
+                      <td colspan="5" class="text-center" style="color: var(--text-dim)">目前無年度股利資料</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1714,6 +1930,9 @@
       const { createApp, nextTick } = Vue;
       createApp({
         data() {
+          const currentYear = new Date().getFullYear();
+          const yearStart = `${currentYear}-01-01`;
+          const yearEnd = `${currentYear}-12-31`;
           return {
             currentPage: "overview",
             summary: { total_assets: 0, total_liabilities: 0, net_assets: 0 },
@@ -1758,6 +1977,7 @@
             editingTxId: null,
             stockQuoteLoading: false,
             taxSettingsSaving: false,
+            nhiSettingsSaving: false,
             repairStockInfoLoading: false,
             repairStockInfoMessage: "",
             missingPriceLoading: false,
@@ -1784,14 +2004,21 @@
               bond_buy_tax_rate_pct: 0,
               bond_sell_tax_rate_pct: 0.1,
             },
+            nhiSettings: {
+              nhi_supplement_rate_pct: 2.11,
+              nhi_supplement_threshold: 20000,
+            },
             txFilter: {
               stock_id: "",
               date_from: "",
               date_to: "",
               only_active_holdings: false,
             },
+            txTimelineFilter: {
+              only_cash_with_holdings: false,
+            },
             overviewFilter: {
-              only_active_holdings: false,
+              only_active_holdings: true,
             },
             txPriceRefreshMode: "filtered",
             dividendSyncLoading: false,
@@ -1803,12 +2030,32 @@
             healthCheckReport: null,
             backupLoading: false,
             backupInfo: null,
+            dividendRecalcYears: 2,
+            dividendRecalcStartYear: 2019,
+            dividendRecalc: {
+              job_id: "",
+              status: "idle",
+              total_stocks: 0,
+              processed_stocks: 0,
+              progress_pct: 0,
+              current_stock_id: "",
+              success_count: 0,
+              failed_count: 0,
+              failed_stocks: [],
+              diff_report: {
+                start_year: 2019,
+                changed_count: 0,
+                top_changes: [],
+              },
+            },
+            dividendRecalcPollingId: null,
+            showDividendDiffReport: false,
             allDividends: { items: [] },
             allStockDividends: { items: [] },
             dividendFilter: {
               stock_id: "",
-              date_from: "",
-              date_to: "",
+              date_from: yearStart,
+              date_to: yearEnd,
             },
             dividendForm: {
               stock_id: "",
@@ -1907,14 +2154,13 @@
             return "";
           },
           filteredTransactions() {
-            if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to && !this.txFilter.only_active_holdings) {
+            if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to) {
               return this.allTransactions.items;
             }
             return this.allTransactions.items.filter(tx => {
               if (this.txFilter.stock_id && tx.stock_id !== this.txFilter.stock_id) return false;
               if (this.txFilter.date_from && tx.date < this.txFilter.date_from) return false;
               if (this.txFilter.date_to && tx.date > this.txFilter.date_to) return false;
-              if (this.txFilter.only_active_holdings && !this.activeHoldingStockIds.has(tx.stock_id)) return false;
               return true;
             });
           },
@@ -1928,7 +2174,6 @@
               if (this.txFilter.stock_id && sid !== this.txFilter.stock_id) continue;
               if (this.txFilter.date_from && item.allot_date < this.txFilter.date_from) continue;
               if (this.txFilter.date_to && item.allot_date > this.txFilter.date_to) continue;
-              if (this.txFilter.only_active_holdings && !this.activeHoldingStockIds.has(sid)) continue;
 
               rows.push({
                 key: `${item.id || "stock"}-${sid}-${item.allot_date}-${item.ex_date}`,
@@ -1936,9 +2181,42 @@
                 stock_id: sid,
                 chinese_name: names.get(sid) || sid,
                 type: Number(item.bonus_shares || 0) < 0 ? "減資" : "配股",
+                holding_shares: Number(item.holding_shares || 0),
                 share_delta: Number(item.bonus_shares || 0),
+                cash_amount: 0,
                 note: `${Number(item.bonus_shares || 0) < 0 ? "減資" : "配股"}比率 ${Number(item.ratio || 0).toFixed(4)}`,
                 source: item.source || "manual",
+                eventType: "stock",
+              });
+            }
+
+            for (const item of this.allDividends.items || []) {
+              const sid = item.stock_id;
+              if (!sid) continue;
+              const eventDate = item.pay_date || item.ex_date;
+              if (!eventDate) continue;
+              if (this.txFilter.stock_id && sid !== this.txFilter.stock_id) continue;
+              if (this.txFilter.date_from && eventDate < this.txFilter.date_from) continue;
+              if (this.txFilter.date_to && eventDate > this.txFilter.date_to) continue;
+
+              const gross = Number(item.cash_amount_gross ?? item.cash_amount ?? 0);
+              const net = Number(item.cash_amount ?? gross);
+              const premium = Number(item.nhi_premium || 0);
+
+              rows.push({
+                key: `cash-${item.id || "cash"}-${sid}-${eventDate}-${item.ex_date || ""}`,
+                date: eventDate,
+                stock_id: sid,
+                chinese_name: names.get(sid) || sid,
+                type: "配息",
+                holding_shares: Number(item.holding_shares || 0),
+                share_delta: 0,
+                cash_amount: net,
+                note: premium > 0
+                  ? `每股 ${this.fmtPrice(item.amount_per_share || 0)}，淨配息 ${this.fmt(net)}（稅前 ${this.fmt(gross)}，健保 ${this.fmt(premium)}）`
+                  : `每股 ${this.fmtPrice(item.amount_per_share || 0)}，配息 ${this.fmt(net)}`,
+                source: item.source || "manual",
+                eventType: "cash",
               });
             }
 
@@ -1950,24 +2228,6 @@
           transactionTimelineRows() {
             const timeline = [];
 
-            for (const tx of this.filteredTransactions || []) {
-              const delta = tx.action === "buy" ? Number(tx.shares || 0) : -Number(tx.shares || 0);
-              timeline.push({
-                key: `tx-${tx.id}`,
-                date: tx.date,
-                stock_id: tx.stock_id,
-                chinese_name: tx.chinese_name || tx.stock_id,
-                typeLabel: tx.action === "buy" ? "交易-買進" : "交易-賣出",
-                typeClass: tx.action === "buy" ? "backup" : "official",
-                share_delta: delta,
-                note: `成交 ${this.fmtPrice(tx.price)}，手續費 ${this.fmt(tx.fees)}，交易稅 ${this.fmt(tx.transaction_tax)}`,
-                metaLabel: "成交價",
-                metaClass: "manual",
-                metaText: `${this.fmtPrice(tx.price)} / 現價 ${this.fmtPrice(tx.current_price)}`,
-                isCorporate: false,
-              });
-            }
-
             for (const row of this.transactionCorporateActions || []) {
               timeline.push({
                 key: `ca-${row.key}`,
@@ -1975,26 +2235,41 @@
                 stock_id: row.stock_id,
                 chinese_name: row.chinese_name,
                 typeLabel: row.type,
-                typeClass: row.type === "減資" ? "backup" : "official",
+                typeClass: row.type === "減資" ? "backup" : row.type === "配息" ? "manual" : "official",
+                holding_shares: Number(row.holding_shares || 0),
                 share_delta: Number(row.share_delta || 0),
+                cash_amount: Number(row.cash_amount || 0),
                 note: row.note,
                 metaLabel: this.dividendSourceMeta(row.source).label,
                 metaClass: this.dividendSourceMeta(row.source).className,
                 metaText: row.source || "manual",
                 isCorporate: true,
+                eventType: row.eventType || "stock",
               });
             }
 
             return timeline.sort((a, b) => {
               if (a.date === b.date) {
-                if (a.stock_id === b.stock_id) {
-                  if (a.isCorporate === b.isCorporate) return 0;
-                  return a.isCorporate ? 1 : -1;
-                }
+                if (a.stock_id === b.stock_id) return 0;
                 return a.stock_id.localeCompare(b.stock_id);
               }
               return a.date > b.date ? -1 : 1;
             });
+          },
+          filteredTransactionTimelineRows() {
+            const rows = this.transactionTimelineRows || [];
+            if (!this.txTimelineFilter.only_cash_with_holdings) {
+              return rows;
+            }
+            return rows.filter((row) => row.eventType !== "cash" || Number(row.holding_shares || 0) > 0);
+          },
+          timelineStats() {
+            const rows = this.filteredTransactionTimelineRows || [];
+            const cashCount = rows.filter((row) => row.eventType === "cash").length;
+            const stockActionCount = rows.filter((row) => row.eventType !== "cash").length;
+            const cashTotal = rows.reduce((acc, row) => acc + (row.eventType === "cash" ? Number(row.cash_amount || 0) : 0), 0);
+            const netShareDelta = rows.reduce((acc, row) => acc + Number(row.share_delta || 0), 0);
+            return { cashCount, cashTotal, stockActionCount, netShareDelta };
           },
           filteredTransactionStockIds() {
             const ids = new Set();
@@ -2044,9 +2319,39 @@
               endingInventory,
             };
           },
+          txMarketReference() {
+            const rows = this.filteredTransactions || [];
+            const latestByStock = new Map();
+            for (const tx of rows) {
+              if (!tx.stock_id) continue;
+              if (!latestByStock.has(tx.stock_id)) {
+                latestByStock.set(tx.stock_id, tx);
+              }
+            }
+
+            const validPrices = Array.from(latestByStock.values())
+              .map((x) => Number(x.current_price || 0))
+              .filter((x) => x > 0);
+
+            if (!validPrices.length) {
+              return { label: "參考市價 -" };
+            }
+
+            const stocks = Array.from(latestByStock.keys());
+            if (stocks.length === 1) {
+              return { label: `參考市價 ${this.fmtPrice(validPrices[0])}` };
+            }
+
+            const minPrice = Math.min(...validPrices);
+            const maxPrice = Math.max(...validPrices);
+            return {
+              label: `參考市價區間 ${this.fmtPrice(minPrice)} ~ ${this.fmtPrice(maxPrice)}（${validPrices.length} 檔）`,
+            };
+          },
           filteredDividends() {
             const rows = this.allDividends.items || [];
             return rows.filter((x) => {
+              if (!this.activeHoldingStockIds.has(x.stock_id)) return false;
               if (this.dividendFilter.stock_id && x.stock_id !== this.dividendFilter.stock_id) return false;
               if (this.dividendFilter.date_from && x.pay_date < this.dividendFilter.date_from) return false;
               if (this.dividendFilter.date_to && x.pay_date > this.dividendFilter.date_to) return false;
@@ -2063,6 +2368,7 @@
           filteredStockDividends() {
             const rows = this.allStockDividends.items || [];
             return rows.filter((x) => {
+              if (!this.activeHoldingStockIds.has(x.stock_id)) return false;
               if (this.dividendFilter.stock_id && x.stock_id !== this.dividendFilter.stock_id) return false;
               if (this.dividendFilter.date_from && x.allot_date < this.dividendFilter.date_from) return false;
               if (this.dividendFilter.date_to && x.allot_date > this.dividendFilter.date_to) return false;
@@ -2246,6 +2552,30 @@
               this.taxSettingsSaving = false;
             }
           },
+          async saveNhiSettings() {
+            this.nhiSettingsSaving = true;
+            try {
+              const payload = {
+                nhi_supplement_rate: Number(this.nhiSettings.nhi_supplement_rate_pct || 0) / 100,
+                nhi_supplement_threshold: Number(this.nhiSettings.nhi_supplement_threshold || 0),
+              };
+              const resp = await this.fetchJson("/api/settings/dividend-nhi", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+              });
+              this.nhiSettings = {
+                nhi_supplement_rate_pct: Number((resp.settings.nhi_supplement_rate || 0) * 100),
+                nhi_supplement_threshold: Number(resp.settings.nhi_supplement_threshold || 0),
+              };
+              await this.refreshAll(false);
+              this.showToast("二代健保設定已更新並即時生效。", "success", 3800);
+            } catch (err) {
+              this.showToast(`二代健保設定儲存失敗: ${err.message || err}`, "error", 5000);
+            } finally {
+              this.nhiSettingsSaving = false;
+            }
+          },
           async repairStockInfo() {
             this.repairStockInfoLoading = true;
             this.repairStockInfoMessage = "";
@@ -2335,7 +2665,8 @@
             };
           },
           clearDividendFilter() {
-            this.dividendFilter = { stock_id: "", date_from: "", date_to: "" };
+            const currentYear = new Date().getFullYear();
+            this.dividendFilter = { stock_id: "", date_from: `${currentYear}-01-01`, date_to: `${currentYear}-12-31` };
           },
           async submitDividend() {
             this.dividendError = "";
@@ -2440,6 +2771,83 @@
               this.healthCheckLoading = false;
             }
           },
+          async startDividendRecalcJob() {
+            const years = Math.max(1, Math.min(30, Number(this.dividendRecalcYears || 2)));
+            const startYear = Math.max(1900, Math.min(new Date().getFullYear(), Number(this.dividendRecalcStartYear || 2019)));
+            this.dividendRecalcYears = years;
+            this.dividendRecalcStartYear = startYear;
+
+            try {
+              const resp = await this.fetchJson(`/api/dividends/recalc-jobs?years=${years}&start_year=${startYear}`, { method: "POST" });
+              this.dividendRecalc = {
+                ...this.dividendRecalc,
+                ...resp,
+                status: resp.status || "queued",
+              };
+              this.showDividendDiffReport = false;
+              this.startDividendRecalcPolling();
+              this.showToast("已啟動全股票重算，將即時更新進度。", "success", 3600);
+            } catch (err) {
+              this.showToast(`啟動重算失敗: ${err.message || err}`, "error", 5000);
+            }
+          },
+          async cancelDividendRecalcJob() {
+            const jobId = this.dividendRecalc.job_id;
+            if (!jobId) {
+              this.showToast("目前沒有可中斷的重算工作。", "warning", 3500);
+              return;
+            }
+            try {
+              const resp = await this.fetchJson(`/api/dividends/recalc-jobs/${jobId}/cancel`, { method: "POST" });
+              this.dividendRecalc = {
+                ...this.dividendRecalc,
+                cancel_requested: true,
+              };
+              this.showToast(resp.message || "已送出中斷請求。", "warning", 3600);
+            } catch (err) {
+              this.showToast(`中斷重算失敗: ${err.message || err}`, "error", 5000);
+            }
+          },
+          startDividendRecalcPolling() {
+            this.stopDividendRecalcPolling();
+            this.pollDividendRecalcJob();
+            this.dividendRecalcPollingId = setInterval(() => {
+              this.pollDividendRecalcJob();
+            }, 1500);
+          },
+          stopDividendRecalcPolling() {
+            if (this.dividendRecalcPollingId) {
+              clearInterval(this.dividendRecalcPollingId);
+              this.dividendRecalcPollingId = null;
+            }
+          },
+          async pollDividendRecalcJob() {
+            const jobId = this.dividendRecalc.job_id;
+            if (!jobId) return;
+            try {
+              const resp = await this.fetchJson(`/api/dividends/recalc-jobs/${jobId}`);
+              this.dividendRecalc = {
+                ...this.dividendRecalc,
+                ...resp,
+              };
+              const status = String(resp.status || "").toLowerCase();
+              if (status === "completed") {
+                this.stopDividendRecalcPolling();
+                this.showToast("全股票重算完成。", "success", 3600);
+                await this.refreshAll(false);
+              } else if (status === "cancelled") {
+                this.stopDividendRecalcPolling();
+                this.showToast("全股票重算已中斷。", "warning", 3600);
+                await this.refreshAll(false);
+              } else if (status === "failed") {
+                this.stopDividendRecalcPolling();
+                this.showToast(`全股票重算失敗: ${resp.error || "未知錯誤"}`, "error", 5000);
+              }
+            } catch (err) {
+              this.stopDividendRecalcPolling();
+              this.showToast(`查詢重算進度失敗: ${err.message || err}`, "error", 5000);
+            }
+          },
           async backupDatabase(offsite = false) {
             this.backupLoading = true;
             try {
@@ -2459,7 +2867,7 @@
           async refreshAll(runBackground = true) {
             this.isRefreshing = true;
             try {
-              const [summary, performance, allocation, expected, loans, allTx, allLoans, taxSettingsResp, allDividends, allStockDividends] = await Promise.all([
+              const [summary, performance, allocation, expected, loans, allTx, allLoans, taxSettingsResp, nhiSettingsResp, allDividends, allStockDividends] = await Promise.all([
                 this.fetchJson("/api/portfolio/summary"),
                 this.fetchJson("/api/portfolio/performance"),
                 this.fetchJson("/api/portfolio/allocation"),
@@ -2468,6 +2876,7 @@
                 this.fetchJson("/api/transactions?limit=5000"),
                 this.fetchJson("/api/loans/list"),
                 this.fetchJson("/api/settings/transaction-tax"),
+                this.fetchJson("/api/settings/dividend-nhi"),
                 this.fetchJson("/api/dividends/cash?limit=5000"),
                 this.fetchJson("/api/dividends/stock?limit=5000"),
               ]);
@@ -2488,6 +2897,10 @@
                 etf_sell_tax_rate_pct: Number((taxSettingsResp.settings.etf_sell_tax_rate || 0) * 100),
                 bond_buy_tax_rate_pct: Number((taxSettingsResp.settings.bond_buy_tax_rate || 0) * 100),
                 bond_sell_tax_rate_pct: Number((taxSettingsResp.settings.bond_sell_tax_rate || 0) * 100),
+              };
+              this.nhiSettings = {
+                nhi_supplement_rate_pct: Number((nhiSettingsResp.settings.nhi_supplement_rate || 0) * 100),
+                nhi_supplement_threshold: Number(nhiSettingsResp.settings.nhi_supplement_threshold || 0),
               };
 
               this.renderCharts();
@@ -2769,7 +3182,7 @@
             }
           },
           applyTxFilter() {
-            // Just trigger the computed property update
+            // Trigger computed filters
           },
           clearTxFilter() {
             this.txFilter = { stock_id: "", date_from: "", date_to: "", only_active_holdings: false };
@@ -2828,6 +3241,9 @@
         },
         mounted() {
           this.refreshAll();
+        },
+        beforeUnmount() {
+          this.stopDividendRecalcPolling();
         },
       }).mount("#app");
     </script>

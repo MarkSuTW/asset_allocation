@@ -17,6 +17,12 @@ python init_db.py
 uvicorn main:app --reload
 ```
 
+若 Windows 上出現找不到 `uvicorn`，可改用：
+
+```bash
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+```
+
 啟動後打開：
 
 - http://127.0.0.1:8000/
@@ -35,8 +41,13 @@ uvicorn main:app --reload
 - `GET /api/stock/{stock_id}/quote`
 - `GET /api/settings/transaction-tax`
 - `PUT /api/settings/transaction-tax`
+- `GET /api/settings/dividend-nhi`
+- `PUT /api/settings/dividend-nhi`
 - `POST /api/settings/repair-stock-info`
 - `POST /api/dividends/auto-sync`
+- `POST /api/dividends/recalc-jobs`
+- `GET /api/dividends/recalc-jobs/{job_id}`
+- `POST /api/dividends/recalc-jobs/{job_id}/cancel`
 - `GET /api/system/version`
 - `GET /api/system/audit-logs`
 - `GET /api/system/data-health`

@@ -1,13 +1,17 @@
 import json
+import http.client
 import html
 import math
 import os
 import re
 import ssl
 import sqlite3
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from collections import defaultdict, deque
 from datetime import date, datetime
 from pathlib import Path
@@ -31,6 +35,8 @@ APP_DIR = Path(__file__).resolve().parent
 _RUNTIME_SCHEMA_READY = False
 _LOCAL_STOCK_NAME_MAP: Optional[Dict[str, str]] = None
 _AUTO_STOCK_INFO_REPAIR_DONE = False
+_DIVIDEND_RECALC_JOBS: Dict[str, Dict[str, Any]] = {}
+_DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
 
 app = FastAPI(title="Family Office Dashboard API", version="1.0.0")
 
@@ -74,6 +80,11 @@ class TaxSettingsUpdate(BaseModel):
     etf_sell_tax_rate: float = Field(ge=0)
     bond_buy_tax_rate: float = Field(ge=0)
     bond_sell_tax_rate: float = Field(ge=0)
+
+
+class NhiSettingsUpdate(BaseModel):
+    nhi_supplement_rate: float = Field(ge=0)
+    nhi_supplement_threshold: float = Field(ge=0)
 
 
 class CashDividendCreate(BaseModel):
@@ -127,6 +138,11 @@ DEFAULT_TAX_SETTINGS = {
     "bond_sell_tax_rate": 0.001,
 }
 
+DEFAULT_NHI_SETTINGS = {
+    "nhi_supplement_rate": 0.0211,
+    "nhi_supplement_threshold": 20000.0,
+}
+
 
 def get_transaction_tax_settings(conn: sqlite3.Connection) -> Dict[str, float]:
     keys = tuple(DEFAULT_TAX_SETTINGS.keys())
@@ -159,6 +175,20 @@ def set_transaction_tax_settings(conn: sqlite3.Connection, settings: Dict[str, f
             (k, str(v)),
         )
     return safe
+
+
+def set_nhi_settings(conn: sqlite3.Connection, settings: Dict[str, float]) -> Dict[str, float]:
+    safe_rate = float(settings.get("nhi_supplement_rate", DEFAULT_NHI_SETTINGS["nhi_supplement_rate"]))
+    safe_threshold = float(settings.get("nhi_supplement_threshold", DEFAULT_NHI_SETTINGS["nhi_supplement_threshold"]))
+    if safe_rate < 0 or safe_threshold < 0:
+        raise HTTPException(status_code=400, detail="nhi settings must be >= 0")
+
+    set_app_setting(conn, "nhi_supplement_rate", str(safe_rate))
+    set_app_setting(conn, "nhi_supplement_threshold", str(safe_threshold))
+    return {
+        "nhi_supplement_rate": safe_rate,
+        "nhi_supplement_threshold": safe_threshold,
+    }
 
 
 def get_app_setting(conn: sqlite3.Connection, key: str, default: Optional[str] = None) -> Optional[str]:
@@ -282,6 +312,32 @@ def compute_stock_event_settlement(holding_shares: float, ratio: float) -> Dict[
     return {"base_shares": base_shares, "share_delta": delta}
 
 
+def get_nhi_settings(conn: sqlite3.Connection) -> Dict[str, float]:
+    rate_raw = get_app_setting(conn, "nhi_supplement_rate", str(DEFAULT_NHI_SETTINGS["nhi_supplement_rate"])) or str(DEFAULT_NHI_SETTINGS["nhi_supplement_rate"])
+    threshold_raw = get_app_setting(conn, "nhi_supplement_threshold", str(DEFAULT_NHI_SETTINGS["nhi_supplement_threshold"])) or str(DEFAULT_NHI_SETTINGS["nhi_supplement_threshold"])
+    try:
+        rate = max(0.0, float(rate_raw))
+    except (TypeError, ValueError):
+        rate = 0.0211
+    try:
+        threshold = max(0.0, float(threshold_raw))
+    except (TypeError, ValueError):
+        threshold = 20000.0
+    return {"rate": rate, "threshold": threshold}
+
+
+def compute_nhi_premium(gross_cash_amount: float, nhi_rate: float, nhi_threshold: float) -> float:
+    gross = float(gross_cash_amount or 0.0)
+    if gross < float(nhi_threshold) or float(nhi_rate) <= 0:
+        return 0.0
+    return round(gross * float(nhi_rate), 2)
+
+
+def compute_net_cash_dividend(gross_cash_amount: float, nhi_rate: float, nhi_threshold: float) -> float:
+    premium = compute_nhi_premium(gross_cash_amount, nhi_rate, nhi_threshold)
+    return round(float(gross_cash_amount or 0.0) - premium, 2)
+
+
 def get_cash_dividend_sum(conn: sqlite3.Connection, stock_id: str, date_from: Optional[str] = None) -> float:
     sid = normalize_stock_id(stock_id)
     params: List[Any] = [sid]
@@ -290,11 +346,18 @@ def get_cash_dividend_sum(conn: sqlite3.Connection, stock_id: str, date_from: Op
         where.append("pay_date >= ?")
         params.append(normalize_date(date_from))
 
-    row = conn.execute(
-        f"SELECT COALESCE(SUM(cash_amount), 0) AS v FROM cash_dividends WHERE {' AND '.join(where)}",
+    rows = conn.execute(
+        f"SELECT cash_amount FROM cash_dividends WHERE {' AND '.join(where)}",
         params,
-    ).fetchone()
-    return float(row["v"] if row else 0.0)
+    ).fetchall()
+    nhi = get_nhi_settings(conn)
+    return round(
+        sum(
+            compute_net_cash_dividend(float(r["cash_amount"] or 0.0), nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"])
+            for r in rows
+        ),
+        2,
+    )
 
 
 def get_bonus_shares_sum(conn: sqlite3.Connection, stock_id: str, date_from: Optional[str] = None) -> float:
@@ -846,11 +909,13 @@ def _mops_post_json(api_name: str, payload: Dict[str, Any]) -> Optional[Dict[str
             "Referer": f"https://mops.twse.com.tw/mops/#/web/{'t108sb19' if api_name == 't108sb19_detail' else api_name}",
         },
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15, context=ssl._create_unverified_context()) as resp:
-            return json.loads(resp.read().decode("utf-8", errors="ignore"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        return None
+    for _ in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=15, context=ssl._create_unverified_context()) as resp:
+                return json.loads(resp.read().decode("utf-8", errors="ignore"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, http.client.RemoteDisconnected, OSError):
+            continue
+    return None
 
 
 def _extract_mops_detail_cash_event(detail_result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1153,203 +1218,23 @@ def fetch_twse_dividend_list_events(stock_id: str, years: int = 2) -> Dict[str, 
 
 
 def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict[str, Any]:
-    rows = conn.execute(
-        """
-        SELECT stock_id
-        FROM holdings
-        WHERE COALESCE(shares, 0) > 0
-        ORDER BY stock_id
-        """
-    ).fetchall()
-    stock_ids = [normalize_stock_id(r["stock_id"]) for r in rows if normalize_stock_id(r["stock_id"])]
+    stock_ids = _list_dividend_sync_stock_ids(conn)
 
     inserted_cash = 0
     inserted_stock = 0
     updated_stock = 0
     stock_details: List[Dict[str, Any]] = []
+    failed_stocks: List[Dict[str, Any]] = []
 
     for sid in stock_ids:
-        min_tx_date_row = conn.execute(
-            "SELECT MIN(date) AS min_date FROM transactions WHERE stock_id = ?",
-            (sid,),
-        ).fetchone()
-        requested_years = max(1, int(years))
-        current_roc_year = date.today().year - 1911
-        start_roc_year = max(current_roc_year - requested_years + 1, 1)
-        dynamic_years = requested_years
-        if min_tx_date_row and min_tx_date_row["min_date"]:
-            try:
-                tx_year_ad = datetime.fromisoformat(str(min_tx_date_row["min_date"])).date().year
-                tx_year_roc = tx_year_ad - 1911
-                start_roc_year = max(1, min(start_roc_year, tx_year_roc))
-                dynamic_years = max(dynamic_years, date.today().year - tx_year_ad + 1)
-            except ValueError:
-                pass
-
-        twse_events = fetch_twse_dividend_list_events(sid, years=dynamic_years)
-        yahoo_events = fetch_yahoo_dividend_events(sid, years=dynamic_years)
-        mops_reduction_events = fetch_mops_capital_reduction_events(sid, start_roc_year, current_roc_year)
-        cash_source_events = twse_events.get("cash") or []
-        if not cash_source_events:
-            cash_source_events = yahoo_events.get("cash") or []
-
-        merged_stock_events: Dict[tuple, Dict[str, Any]] = {}
-        for event in yahoo_events.get("stock") or []:
-            key = (event["ex_date"], round(float(event["ratio"]), 6))
-            merged_stock_events[key] = {
-                "ex_date": event["ex_date"],
-                "allot_date": event.get("allot_date") or event["ex_date"],
-                "ratio": float(event["ratio"]),
-                "source": str(event.get("source") or "yahoo_split_auto"),
-            }
-
-        for event in mops_reduction_events.get("stock") or []:
-            key = (event["ex_date"], round(float(event["ratio"]), 6))
-            merged_stock_events[key] = {
-                "ex_date": event["ex_date"],
-                "allot_date": event.get("allot_date") or event["ex_date"],
-                "ratio": float(event["ratio"]),
-                "source": str(event.get("source") or "mops_capital_reduction_auto"),
-            }
-
-        stock_source_events = sorted(merged_stock_events.values(), key=lambda x: (x["ex_date"], x["ratio"]))
-        stock_inserted_cash = 0
-        stock_inserted_stock = 0
-        stock_updated_stock = 0
-
-        for event in cash_source_events:
-            ex_date = event["ex_date"]
-            amount_per_share = float(event["amount_per_share"])
-            pay_date = normalize_date(event.get("pay_date") or ex_date)
-            source_name = str(event.get("source") or ("yahoo_auto" if event in (yahoo_events.get("cash") or []) else "twse_etfortune"))
-            exists = conn.execute(
-                """
-                SELECT id, pay_date, source
-                FROM cash_dividends
-                WHERE stock_id = ? AND ex_date = ? AND ABS(amount_per_share - ?) < 0.000001
-                LIMIT 1
-                """,
-                (sid, ex_date, amount_per_share),
-            ).fetchone()
-            if exists:
-                existing_pay_date = normalize_date(exists["pay_date"] or ex_date)
-                existing_source = str(exists["source"] or "")
-                if existing_pay_date != pay_date or existing_source != source_name:
-                    conn.execute(
-                        """
-                        UPDATE cash_dividends
-                        SET pay_date = ?, source = ?, note = ?
-                        WHERE id = ?
-                        """,
-                        (pay_date, source_name, "backfilled from official dividend source", int(exists["id"])),
-                    )
-                continue
-
-            holding_shares = get_shares_on_date(conn, sid, ex_date)
-            if holding_shares <= 1e-9:
-                continue
-
-            cash_amount = round(holding_shares * amount_per_share, 2)
-            conn.execute(
-                """
-                INSERT INTO cash_dividends (stock_id, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (sid, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source_name, "auto synced from official source" if source_name != "yahoo_auto" else "auto synced from market"),
-            )
-            inserted_cash += 1
-            stock_inserted_cash += 1
-
-        for event in stock_source_events:
-            ex_date = event["ex_date"]
-            allot_date = normalize_date(event.get("allot_date") or ex_date)
-            ratio = float(event["ratio"])
-            source_name = str(event.get("source") or "yahoo_split_auto")
-            exists = conn.execute(
-                """
-                SELECT id, allot_date, holding_shares, bonus_shares, source
-                FROM stock_dividends
-                WHERE stock_id = ? AND ex_date = ? AND ABS(ratio - ?) < 0.000001
-                LIMIT 1
-                """,
-                (sid, ex_date, ratio),
-            ).fetchone()
-            holding_shares = get_shares_on_date(
-                conn,
-                sid,
-                ex_date,
-                stock_dividend_before_tx=False,
-                exclude_stock_dividend_id=int(exists["id"]) if exists else None,
-            )
-            if holding_shares <= 1e-9:
-                continue
-
-            settlement = compute_stock_event_settlement(holding_shares, ratio)
-            base_holding_shares = float(settlement["base_shares"])
-            bonus_shares = float(settlement["share_delta"])
-            if abs(bonus_shares) <= 1e-9:
-                continue
-            if bonus_shares < 0 and holding_shares + bonus_shares < 0:
-                bonus_shares = -float(int(holding_shares))
-
-            if exists:
-                needs_update = (
-                    normalize_date(exists["allot_date"] or ex_date) != allot_date
-                    or abs(float(exists["holding_shares"] or 0.0) - base_holding_shares) > 1e-9
-                    or abs(float(exists["bonus_shares"] or 0.0) - bonus_shares) > 1e-9
-                    or str(exists["source"] or "") != source_name
-                )
-                if needs_update:
-                    conn.execute(
-                        """
-                        UPDATE stock_dividends
-                        SET allot_date = ?, holding_shares = ?, bonus_shares = ?, source = ?, note = ?
-                        WHERE id = ?
-                        """,
-                        (
-                            allot_date,
-                            base_holding_shares,
-                            bonus_shares,
-                            source_name,
-                            "auto synced from market",
-                            int(exists["id"]),
-                        ),
-                    )
-                    updated_stock += 1
-                    stock_updated_stock += 1
-                continue
-
-            conn.execute(
-                """
-                INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, source, note)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    sid,
-                    ex_date,
-                    allot_date,
-                    ratio,
-                    base_holding_shares,
-                    bonus_shares,
-                    source_name,
-                    "auto synced from market",
-                ),
-            )
-            inserted_stock += 1
-            stock_inserted_stock += 1
-
-        stock_details.append(
-            {
-                "stock_id": sid,
-                "source": (cash_source_events[0].get("source") if cash_source_events else (yahoo_events.get("source_symbol") or "unavailable")),
-                "attempted_symbols": yahoo_events.get("attempted_symbols") or [],
-                "fetched_cash_events": len(cash_source_events),
-                "fetched_stock_events": len(stock_source_events),
-                "inserted_cash_events": stock_inserted_cash,
-                "inserted_stock_events": stock_inserted_stock,
-                "updated_stock_events": stock_updated_stock,
-            }
-        )
+        try:
+            one = _sync_dividends_for_stock(conn, sid, years=years)
+            inserted_cash += int(one.get("inserted_cash_events", 0))
+            inserted_stock += int(one.get("inserted_stock_events", 0))
+            updated_stock += int(one.get("updated_stock_events", 0))
+            stock_details.append(one)
+        except Exception as exc:
+            failed_stocks.append({"stock_id": sid, "error": str(exc)})
 
     if inserted_stock > 0 or updated_stock > 0:
         rebuild_holdings_and_realized(conn)
@@ -1358,8 +1243,489 @@ def sync_dividends_from_market(conn: sqlite3.Connection, years: int = 2) -> Dict
         "processed_stocks": len(stock_ids),
         "inserted_cash_dividends": inserted_cash,
         "inserted_stock_dividends": inserted_stock,
+        "updated_stock_dividends": updated_stock,
+        "failed_stocks": failed_stocks,
         "stock_details": stock_details,
     }
+
+
+def _list_dividend_sync_stock_ids(conn: sqlite3.Connection) -> List[str]:
+    rows = conn.execute(
+        """
+        SELECT stock_id
+        FROM (
+            SELECT DISTINCT stock_id AS stock_id
+            FROM transactions
+            WHERE TRIM(COALESCE(stock_id, '')) <> ''
+
+            UNION
+
+            SELECT DISTINCT stock_id AS stock_id
+            FROM holdings
+            WHERE TRIM(COALESCE(stock_id, '')) <> ''
+
+            UNION
+
+            SELECT DISTINCT stock_id AS stock_id
+            FROM cash_dividends
+            WHERE TRIM(COALESCE(stock_id, '')) <> ''
+
+            UNION
+
+            SELECT DISTINCT stock_id AS stock_id
+            FROM stock_dividends
+            WHERE TRIM(COALESCE(stock_id, '')) <> ''
+        ) src
+        ORDER BY stock_id
+        """
+    ).fetchall()
+    return [normalize_stock_id(r["stock_id"]) for r in rows if normalize_stock_id(r["stock_id"])]
+
+
+def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2) -> Dict[str, Any]:
+    sid = normalize_stock_id(sid)
+    if not sid:
+        raise ValueError("invalid stock id")
+
+    min_tx_date_row = conn.execute(
+        "SELECT MIN(date) AS min_date FROM transactions WHERE stock_id = ?",
+        (sid,),
+    ).fetchone()
+    requested_years = max(1, int(years))
+    current_roc_year = date.today().year - 1911
+    start_roc_year = max(current_roc_year - requested_years + 1, 1)
+    dynamic_years = requested_years
+    if min_tx_date_row and min_tx_date_row["min_date"]:
+        try:
+            tx_year_ad = datetime.fromisoformat(str(min_tx_date_row["min_date"])).date().year
+            tx_year_roc = tx_year_ad - 1911
+            start_roc_year = max(1, min(start_roc_year, tx_year_roc))
+            dynamic_years = max(dynamic_years, date.today().year - tx_year_ad + 1)
+        except ValueError:
+            pass
+
+    twse_events = fetch_twse_dividend_list_events(sid, years=dynamic_years)
+    yahoo_events = fetch_yahoo_dividend_events(sid, years=dynamic_years)
+    mops_reduction_events = fetch_mops_capital_reduction_events(sid, start_roc_year, current_roc_year)
+    cash_source_events = twse_events.get("cash") or []
+    if not cash_source_events:
+        cash_source_events = yahoo_events.get("cash") or []
+
+    merged_stock_events: Dict[tuple, Dict[str, Any]] = {}
+    for event in yahoo_events.get("stock") or []:
+        key = (event["ex_date"], round(float(event["ratio"]), 6))
+        merged_stock_events[key] = {
+            "ex_date": event["ex_date"],
+            "allot_date": event.get("allot_date") or event["ex_date"],
+            "ratio": float(event["ratio"]),
+            "source": str(event.get("source") or "yahoo_split_auto"),
+        }
+
+    for event in mops_reduction_events.get("stock") or []:
+        key = (event["ex_date"], round(float(event["ratio"]), 6))
+        merged_stock_events[key] = {
+            "ex_date": event["ex_date"],
+            "allot_date": event.get("allot_date") or event["ex_date"],
+            "ratio": float(event["ratio"]),
+            "source": str(event.get("source") or "mops_capital_reduction_auto"),
+        }
+
+    stock_source_events = sorted(merged_stock_events.values(), key=lambda x: (x["ex_date"], x["ratio"]))
+    stock_inserted_cash = 0
+    stock_inserted_stock = 0
+    stock_updated_stock = 0
+
+    for event in cash_source_events:
+        ex_date = event["ex_date"]
+        amount_per_share = float(event["amount_per_share"])
+        pay_date = normalize_date(event.get("pay_date") or ex_date)
+        source_name = str(event.get("source") or ("yahoo_auto" if event in (yahoo_events.get("cash") or []) else "twse_etfortune"))
+        holding_shares = get_shares_on_date(conn, sid, ex_date)
+        cash_amount = round(holding_shares * amount_per_share, 2)
+        exists = conn.execute(
+            """
+            SELECT id, pay_date, source, holding_shares, cash_amount
+            FROM cash_dividends
+            WHERE stock_id = ? AND ex_date = ? AND ABS(amount_per_share - ?) < 0.000001
+            LIMIT 1
+            """,
+            (sid, ex_date, amount_per_share),
+        ).fetchone()
+        if exists:
+            existing_pay_date = normalize_date(exists["pay_date"] or ex_date)
+            existing_source = str(exists["source"] or "")
+            if holding_shares <= 1e-9:
+                if existing_source != "manual":
+                    conn.execute("DELETE FROM cash_dividends WHERE id = ?", (int(exists["id"]),))
+                continue
+
+            if (
+                existing_source != "manual"
+                and (
+                    existing_pay_date != pay_date
+                    or existing_source != source_name
+                    or abs(float(exists["holding_shares"] or 0.0) - holding_shares) > 1e-9
+                    or abs(float(exists["cash_amount"] or 0.0) - cash_amount) > 1e-6
+                )
+            ):
+                conn.execute(
+                    """
+                    UPDATE cash_dividends
+                    SET pay_date = ?, holding_shares = ?, cash_amount = ?, source = ?, note = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        pay_date,
+                        holding_shares,
+                        cash_amount,
+                        source_name,
+                        "backfilled from official dividend source",
+                        int(exists["id"]),
+                    ),
+                )
+            continue
+
+        if holding_shares <= 1e-9:
+            continue
+
+        conn.execute(
+            """
+            INSERT INTO cash_dividends (stock_id, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (sid, ex_date, pay_date, amount_per_share, holding_shares, cash_amount, source_name, "auto synced from official source" if source_name != "yahoo_auto" else "auto synced from market"),
+        )
+        stock_inserted_cash += 1
+
+    # Keep official source as single truth when yahoo_auto has the same ex-date.
+    duplicated_yahoo_rows = conn.execute(
+        """
+        SELECT y.id
+        FROM cash_dividends y
+        WHERE y.stock_id = ?
+          AND y.source = 'yahoo_auto'
+          AND EXISTS (
+              SELECT 1
+              FROM cash_dividends o
+              WHERE o.stock_id = y.stock_id
+                AND o.ex_date = y.ex_date
+                AND o.id <> y.id
+                AND o.source <> 'yahoo_auto'
+          )
+        """,
+        (sid,),
+    ).fetchall()
+    for row in duplicated_yahoo_rows:
+        conn.execute("DELETE FROM cash_dividends WHERE id = ?", (int(row["id"]),))
+
+    for event in stock_source_events:
+        ex_date = event["ex_date"]
+        allot_date = normalize_date(event.get("allot_date") or ex_date)
+        ratio = float(event["ratio"])
+        source_name = str(event.get("source") or "yahoo_split_auto")
+        exists = conn.execute(
+            """
+            SELECT id, allot_date, holding_shares, bonus_shares, source
+            FROM stock_dividends
+            WHERE stock_id = ? AND ex_date = ? AND ABS(ratio - ?) < 0.000001
+            LIMIT 1
+            """,
+            (sid, ex_date, ratio),
+        ).fetchone()
+        holding_shares = get_shares_on_date(
+            conn,
+            sid,
+            ex_date,
+            stock_dividend_before_tx=False,
+            exclude_stock_dividend_id=int(exists["id"]) if exists else None,
+        )
+        if holding_shares <= 1e-9:
+            if exists and str(exists["source"] or "") != "manual":
+                conn.execute("DELETE FROM stock_dividends WHERE id = ?", (int(exists["id"]),))
+                stock_updated_stock += 1
+            continue
+
+        settlement = compute_stock_event_settlement(holding_shares, ratio)
+        base_holding_shares = float(settlement["base_shares"])
+        bonus_shares = float(settlement["share_delta"])
+        if abs(bonus_shares) <= 1e-9:
+            continue
+        if bonus_shares < 0 and holding_shares + bonus_shares < 0:
+            bonus_shares = -float(int(holding_shares))
+
+        if exists:
+            needs_update = (
+                normalize_date(exists["allot_date"] or ex_date) != allot_date
+                or abs(float(exists["holding_shares"] or 0.0) - base_holding_shares) > 1e-9
+                or abs(float(exists["bonus_shares"] or 0.0) - bonus_shares) > 1e-9
+                or str(exists["source"] or "") != source_name
+            )
+            if needs_update:
+                conn.execute(
+                    """
+                    UPDATE stock_dividends
+                    SET allot_date = ?, holding_shares = ?, bonus_shares = ?, source = ?, note = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        allot_date,
+                        base_holding_shares,
+                        bonus_shares,
+                        source_name,
+                        "auto synced from market",
+                        int(exists["id"]),
+                    ),
+                )
+                stock_updated_stock += 1
+            continue
+
+        conn.execute(
+            """
+            INSERT INTO stock_dividends (stock_id, ex_date, allot_date, ratio, holding_shares, bonus_shares, source, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sid,
+                ex_date,
+                allot_date,
+                ratio,
+                base_holding_shares,
+                bonus_shares,
+                source_name,
+                "auto synced from market",
+            ),
+        )
+        stock_inserted_stock += 1
+
+    return {
+        "stock_id": sid,
+        "source": (cash_source_events[0].get("source") if cash_source_events else (yahoo_events.get("source_symbol") or "unavailable")),
+        "attempted_symbols": yahoo_events.get("attempted_symbols") or [],
+        "fetched_cash_events": len(cash_source_events),
+        "fetched_stock_events": len(stock_source_events),
+        "inserted_cash_events": stock_inserted_cash,
+        "inserted_stock_events": stock_inserted_stock,
+        "updated_stock_events": stock_updated_stock,
+    }
+
+
+def _snapshot_cash_dividend_totals(conn: sqlite3.Connection, start_year: int) -> Dict[str, float]:
+    start_date = f"{max(1900, int(start_year))}-01-01"
+    rows = conn.execute(
+        """
+        SELECT stock_id, cash_amount
+        FROM cash_dividends
+        WHERE pay_date >= ?
+        ORDER BY stock_id
+        """,
+        (start_date,),
+    ).fetchall()
+    nhi = get_nhi_settings(conn)
+    totals: Dict[str, float] = {}
+    for r in rows:
+        sid = normalize_stock_id(r["stock_id"])
+        if not sid:
+            continue
+        net_amount = compute_net_cash_dividend(float(r["cash_amount"] or 0.0), nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"])
+        totals[sid] = round(totals.get(sid, 0.0) + net_amount, 2)
+    return totals
+
+
+def _build_cash_dividend_diff_report(before_map: Dict[str, float], after_map: Dict[str, float], conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    stock_ids = sorted(set(before_map.keys()) | set(after_map.keys()))
+    if not stock_ids:
+        return []
+
+    placeholders = ",".join(["?"] * len(stock_ids))
+    rows = conn.execute(
+        f"SELECT stock_id, COALESCE(chinese_name, stock_id) AS chinese_name FROM stock_info WHERE stock_id IN ({placeholders})",
+        stock_ids,
+    ).fetchall()
+    name_map = {normalize_stock_id(r["stock_id"]): (r["chinese_name"] or r["stock_id"]) for r in rows}
+
+    result: List[Dict[str, Any]] = []
+    for sid in stock_ids:
+        before_v = float(before_map.get(sid, 0.0))
+        after_v = float(after_map.get(sid, 0.0))
+        delta = round(after_v - before_v, 2)
+        if abs(delta) <= 0.0001:
+            continue
+        result.append(
+            {
+                "stock_id": sid,
+                "chinese_name": name_map.get(sid, sid),
+                "before_cash_dividend": round(before_v, 2),
+                "after_cash_dividend": round(after_v, 2),
+                "delta_cash_dividend": delta,
+            }
+        )
+
+    result.sort(key=lambda x: abs(float(x["delta_cash_dividend"])), reverse=True)
+    return result
+
+
+def _set_dividend_recalc_job_state(job_id: str, patch: Dict[str, Any]) -> None:
+    with _DIVIDEND_RECALC_JOBS_LOCK:
+        current = _DIVIDEND_RECALC_JOBS.get(job_id, {})
+        current.update(patch)
+        _DIVIDEND_RECALC_JOBS[job_id] = current
+
+
+def _get_dividend_recalc_job_state(job_id: str) -> Optional[Dict[str, Any]]:
+    with _DIVIDEND_RECALC_JOBS_LOCK:
+        item = _DIVIDEND_RECALC_JOBS.get(job_id)
+        return dict(item) if item else None
+
+
+def _run_dividend_recalc_job(job_id: str, years: int, start_year: int) -> None:
+    started_at = datetime.now().isoformat(timespec="seconds")
+    _set_dividend_recalc_job_state(job_id, {"status": "running", "started_at": started_at})
+
+    try:
+        with get_conn() as conn:
+            before_map = _snapshot_cash_dividend_totals(conn, start_year=start_year)
+            stock_ids = _list_dividend_sync_stock_ids(conn)
+
+            total = len(stock_ids)
+            inserted_cash = 0
+            inserted_stock = 0
+            updated_stock = 0
+            succeeded: List[Dict[str, Any]] = []
+            failed: List[Dict[str, Any]] = []
+            stock_details: List[Dict[str, Any]] = []
+
+            _set_dividend_recalc_job_state(
+                job_id,
+                {
+                    "total_stocks": total,
+                    "processed_stocks": 0,
+                    "success_count": 0,
+                    "failed_count": 0,
+                    "current_stock_id": "",
+                    "progress_pct": 0.0,
+                },
+            )
+
+            for idx, sid in enumerate(stock_ids, start=1):
+                state = _get_dividend_recalc_job_state(job_id) or {}
+                if state.get("cancel_requested"):
+                    _set_dividend_recalc_job_state(
+                        job_id,
+                        {
+                            "status": "cancelled",
+                            "finished_at": datetime.now().isoformat(timespec="seconds"),
+                            "current_stock_id": "",
+                            "processed_stocks": idx - 1,
+                            "success_count": len(succeeded),
+                            "failed_count": len(failed),
+                            "progress_pct": round(((idx - 1) / total * 100.0), 2) if total else 100.0,
+                            "cancelled": True,
+                        },
+                    )
+                    conn.commit()
+                    return
+
+                _set_dividend_recalc_job_state(
+                    job_id,
+                    {
+                        "current_stock_id": sid,
+                        "processed_stocks": idx - 1,
+                        "progress_pct": round(((idx - 1) / total * 100.0), 2) if total else 100.0,
+                    },
+                )
+
+                try:
+                    one = _sync_dividends_for_stock(conn, sid, years=years)
+                    inserted_cash += int(one.get("inserted_cash_events", 0))
+                    inserted_stock += int(one.get("inserted_stock_events", 0))
+                    updated_stock += int(one.get("updated_stock_events", 0))
+                    stock_details.append(one)
+                    succeeded.append(
+                        {
+                            "stock_id": sid,
+                            "inserted_cash_events": int(one.get("inserted_cash_events", 0)),
+                            "inserted_stock_events": int(one.get("inserted_stock_events", 0)),
+                            "updated_stock_events": int(one.get("updated_stock_events", 0)),
+                        }
+                    )
+                except Exception as exc:
+                    failed.append({"stock_id": sid, "error": str(exc)})
+
+                # Frequent commits avoid long transaction locks and keep progress deterministic.
+                conn.commit()
+                _set_dividend_recalc_job_state(
+                    job_id,
+                    {
+                        "processed_stocks": idx,
+                        "success_count": len(succeeded),
+                        "failed_count": len(failed),
+                        "progress_pct": round((idx / total * 100.0), 2) if total else 100.0,
+                        "recent_failed": failed[-20:],
+                    },
+                )
+
+            if inserted_stock > 0 or updated_stock > 0:
+                rebuild_holdings_and_realized(conn)
+                conn.commit()
+
+            after_map = _snapshot_cash_dividend_totals(conn, start_year=start_year)
+            diff_rows = _build_cash_dividend_diff_report(before_map, after_map, conn)
+            finished_at = datetime.now().isoformat(timespec="seconds")
+            duration_sec = round(max(0.0, time.time() - datetime.fromisoformat(started_at).timestamp()), 2)
+
+            write_audit_log(
+                conn,
+                event_type="dividend_recalc_job",
+                payload={
+                    "job_id": job_id,
+                    "years": int(years),
+                    "start_year": int(start_year),
+                    "processed_stocks": total,
+                    "success_count": len(succeeded),
+                    "failed_count": len(failed),
+                    "inserted_cash_dividends": inserted_cash,
+                    "inserted_stock_dividends": inserted_stock,
+                    "updated_stock_dividends": updated_stock,
+                    "diff_changed_count": len(diff_rows),
+                },
+                severity="INFO",
+                actor="api",
+            )
+            conn.commit()
+
+            _set_dividend_recalc_job_state(
+                job_id,
+                {
+                    "status": "completed",
+                    "finished_at": finished_at,
+                    "duration_sec": duration_sec,
+                    "processed_stocks": total,
+                    "total_stocks": total,
+                    "current_stock_id": "",
+                    "progress_pct": 100.0,
+                    "success_count": len(succeeded),
+                    "failed_count": len(failed),
+                    "inserted_cash_dividends": inserted_cash,
+                    "inserted_stock_dividends": inserted_stock,
+                    "updated_stock_dividends": updated_stock,
+                    "failed_stocks": failed,
+                    "stock_details": stock_details,
+                    "diff_report": {
+                        "start_year": int(start_year),
+                        "changed_count": len(diff_rows),
+                        "top_changes": diff_rows[:100],
+                    },
+                },
+            )
+    except Exception as exc:
+        _set_dividend_recalc_job_state(
+            job_id,
+            {
+                "status": "failed",
+                "finished_at": datetime.now().isoformat(timespec="seconds"),
+                "error": str(exc),
+            },
+        )
 
 
 def parse_market_price_token(raw: Any) -> Optional[float]:
@@ -2163,6 +2529,8 @@ def portfolio_allocation_data(conn: sqlite3.Connection) -> Dict[str, List[Dict[s
 
 def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
     today = date.today()
+    year_start = date(today.year, 1, 1).isoformat()
+    year_end = date(today.year, 12, 31).isoformat()
     default_yield = {
         "個股": 0.03,
         "ETF": 0.045,
@@ -2178,6 +2546,7 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
     ).fetchall()
 
     result = []
+    nhi = get_nhi_settings(conn)
     for row in rows:
         stock_id = row["stock_id"]
         shares = float(row["shares"])
@@ -2185,11 +2554,21 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
             continue
 
         market_value = shares * get_latest_price(conn, stock_id)
-        one_year_ago = today.replace(year=today.year - 1).isoformat()
-        historical = get_cash_dividend_sum(conn, stock_id, one_year_ago)
+        current_year_rows = conn.execute(
+            """
+            SELECT cash_amount
+            FROM cash_dividends
+            WHERE stock_id = ? AND pay_date >= ? AND pay_date <= ?
+            """,
+            (stock_id, year_start, year_end),
+        ).fetchall()
+        current_year_estimate = sum(
+            compute_net_cash_dividend(float(r["cash_amount"] or 0.0), nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"])
+            for r in current_year_rows
+        )
 
         y = default_yield.get(row["asset_type"], 0.03)
-        estimate = float(historical)
+        estimate = float(current_year_estimate)
         if estimate <= 0:
             estimate = market_value * y
 
@@ -2197,7 +2576,7 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
             {
                 "stock_id": stock_id,
                 "expected_dividend": round(estimate, 2),
-                "method": "historical" if float(historical) > 0 else "yield_estimate",
+                "method": "current_year_schedule" if float(current_year_estimate) > 0 else "yield_estimate",
             }
         )
 
@@ -2510,6 +2889,32 @@ def update_transaction_tax_settings_api(payload: TaxSettingsUpdate) -> Dict[str,
     return {"message": "transaction tax settings updated", "settings": settings}
 
 
+@app.get("/api/settings/dividend-nhi")
+def get_dividend_nhi_settings_api() -> Dict[str, Any]:
+    with get_conn() as conn:
+        nhi = get_nhi_settings(conn)
+    return {
+        "settings": {
+            "nhi_supplement_rate": float(nhi["rate"]),
+            "nhi_supplement_threshold": float(nhi["threshold"]),
+        }
+    }
+
+
+@app.put("/api/settings/dividend-nhi")
+def update_dividend_nhi_settings_api(payload: NhiSettingsUpdate) -> Dict[str, Any]:
+    with get_conn() as conn:
+        settings = set_nhi_settings(
+            conn,
+            {
+                "nhi_supplement_rate": float(payload.nhi_supplement_rate),
+                "nhi_supplement_threshold": float(payload.nhi_supplement_threshold),
+            },
+        )
+        conn.commit()
+    return {"message": "dividend NHI settings updated", "settings": settings}
+
+
 @app.get("/api/system/version")
 def get_system_version() -> Dict[str, Any]:
     return {
@@ -2725,6 +3130,90 @@ def auto_sync_dividends_api(force: bool = False, years: int = 2) -> Dict[str, An
     }
 
 
+@app.post("/api/dividends/recalc-jobs")
+def create_dividend_recalc_job_api(years: int = 2, start_year: int = 2019) -> Dict[str, Any]:
+    safe_years = max(1, min(int(years), 30))
+    safe_start_year = max(1900, min(int(start_year), date.today().year))
+
+    with _DIVIDEND_RECALC_JOBS_LOCK:
+        for existing_job in _DIVIDEND_RECALC_JOBS.values():
+            if existing_job.get("status") == "running":
+                raise HTTPException(status_code=409, detail="已有重算工作執行中，請稍後或先查詢現有工作進度")
+
+    job_id = uuid.uuid4().hex
+    created_at = datetime.now().isoformat(timespec="seconds")
+    _set_dividend_recalc_job_state(
+        job_id,
+        {
+            "job_id": job_id,
+            "status": "queued",
+            "created_at": created_at,
+            "years": safe_years,
+            "start_year": safe_start_year,
+            "total_stocks": 0,
+            "processed_stocks": 0,
+            "progress_pct": 0.0,
+            "current_stock_id": "",
+            "success_count": 0,
+            "failed_count": 0,
+            "recent_failed": [],
+            "failed_stocks": [],
+            "stock_details": [],
+            "diff_report": {"start_year": safe_start_year, "changed_count": 0, "top_changes": []},
+        },
+    )
+
+    worker = threading.Thread(target=_run_dividend_recalc_job, args=(job_id, safe_years, safe_start_year), daemon=True)
+    worker.start()
+
+    return {
+        "message": "dividend recalc job started",
+        "job_id": job_id,
+        "status": "queued",
+        "created_at": created_at,
+        "years": safe_years,
+        "start_year": safe_start_year,
+    }
+
+
+@app.get("/api/dividends/recalc-jobs/{job_id}")
+def get_dividend_recalc_job_api(job_id: str) -> Dict[str, Any]:
+    payload = _get_dividend_recalc_job_state(job_id)
+    if not payload:
+        raise HTTPException(status_code=404, detail="找不到指定的重算工作")
+    return payload
+
+
+@app.post("/api/dividends/recalc-jobs/{job_id}/cancel")
+def cancel_dividend_recalc_job_api(job_id: str) -> Dict[str, Any]:
+    state = _get_dividend_recalc_job_state(job_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="找不到指定的重算工作")
+
+    status = str(state.get("status") or "").lower()
+    if status in {"completed", "failed", "cancelled"}:
+        return {
+            "message": f"job already {status}",
+            "job_id": job_id,
+            "status": status,
+            "cancel_requested": bool(state.get("cancel_requested", False)),
+        }
+
+    _set_dividend_recalc_job_state(
+        job_id,
+        {
+            "cancel_requested": True,
+            "cancel_requested_at": datetime.now().isoformat(timespec="seconds"),
+        },
+    )
+    return {
+        "message": "cancel requested",
+        "job_id": job_id,
+        "status": "cancelling",
+        "cancel_requested": True,
+    }
+
+
 @app.get("/api/dividends/cash")
 def list_cash_dividends(
     limit: int = 200,
@@ -2749,6 +3238,7 @@ def list_cash_dividends(
     where_sql = " WHERE " + " AND ".join(where) if where else ""
 
     with get_conn() as conn:
+        nhi = get_nhi_settings(conn)
         rows = conn.execute(
             f"""
             SELECT d.id, d.stock_id, COALESCE(s.chinese_name, d.stock_id) AS chinese_name,
@@ -2772,7 +3262,9 @@ def list_cash_dividends(
             "pay_date": r["pay_date"],
             "amount_per_share": float(r["amount_per_share"]),
             "holding_shares": float(r["holding_shares"]),
-            "cash_amount": float(r["cash_amount"]),
+            "cash_amount_gross": float(r["cash_amount"]),
+            "nhi_premium": compute_nhi_premium(float(r["cash_amount"]), nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"]),
+            "cash_amount": compute_net_cash_dividend(float(r["cash_amount"]), nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"]),
             "source": r["source"],
             "note": r["note"],
         }
@@ -3297,6 +3789,7 @@ def refresh_prices_api(limit: int = 500, scope: str = "transactions", stock_ids:
 def get_stock_detail(stock_id: str) -> Dict[str, Any]:
     stock_id = normalize_stock_id(stock_id)
     with get_conn() as conn:
+        nhi = get_nhi_settings(conn)
         info = conn.execute("SELECT asset_type, sector, chinese_name, current_price FROM stock_info WHERE stock_id = ?", (stock_id,)).fetchone()
         holding = conn.execute(
             "SELECT shares, total_cost FROM holdings WHERE stock_id = ?",
@@ -3324,6 +3817,73 @@ def get_stock_detail(stock_id: str) -> Dict[str, Any]:
             (stock_id,),
         ).fetchall()
 
+        yearly_cash_rows = conn.execute(
+            """
+             SELECT SUBSTR(pay_date, 1, 4) AS year,
+                 cash_amount,
+                 holding_shares
+            FROM cash_dividends
+            WHERE stock_id = ? AND COALESCE(holding_shares, 0) > 0
+             ORDER BY year DESC
+            """,
+            (stock_id,),
+        ).fetchall()
+        yearly_stock_rows = conn.execute(
+            """
+            SELECT SUBSTR(allot_date, 1, 4) AS year,
+                   COALESCE(SUM(bonus_shares), 0) AS bonus_shares,
+                   COALESCE(SUM(holding_shares), 0) AS base_shares,
+                   COUNT(*) AS event_count
+            FROM stock_dividends
+            WHERE stock_id = ? AND ABS(COALESCE(bonus_shares, 0)) > 0.0000001
+            GROUP BY SUBSTR(allot_date, 1, 4)
+            ORDER BY year DESC
+            """,
+            (stock_id,),
+        ).fetchall()
+
+        by_year: Dict[str, Dict[str, Any]] = {}
+        for row in yearly_cash_rows:
+            y = str(row["year"] or "")
+            if not y:
+                continue
+            if y not in by_year:
+                by_year[y] = {
+                    "year": y,
+                    "cash_dividend": 0.0,
+                    "cash_event_count": 0,
+                    "cash_base_shares": 0.0,
+                    "stock_dividend_shares": 0.0,
+                    "stock_event_count": 0,
+                    "stock_base_shares": 0.0,
+                }
+            gross = float(row["cash_amount"] or 0.0)
+            by_year[y]["cash_dividend"] = round(
+                float(by_year[y]["cash_dividend"]) + compute_net_cash_dividend(gross, nhi_rate=nhi["rate"], nhi_threshold=nhi["threshold"]),
+                2,
+            )
+            by_year[y]["cash_event_count"] = int(by_year[y]["cash_event_count"]) + 1
+            by_year[y]["cash_base_shares"] = round(float(by_year[y]["cash_base_shares"]) + float(row["holding_shares"] or 0.0), 2)
+        for row in yearly_stock_rows:
+            y = str(row["year"] or "")
+            if not y:
+                continue
+            if y not in by_year:
+                by_year[y] = {
+                    "year": y,
+                    "cash_dividend": 0.0,
+                    "cash_event_count": 0,
+                    "cash_base_shares": 0.0,
+                    "stock_dividend_shares": 0.0,
+                    "stock_event_count": 0,
+                    "stock_base_shares": 0.0,
+                }
+            by_year[y]["stock_dividend_shares"] = round(float(row["bonus_shares"] or 0.0), 4)
+            by_year[y]["stock_event_count"] = int(row["event_count"] or 0)
+            by_year[y]["stock_base_shares"] = round(float(row["base_shares"] or 0.0), 2)
+
+        yearly_dividends = sorted(by_year.values(), key=lambda x: x["year"], reverse=True)
+
         return {
             "stock_id": stock_id,
             "chinese_name": info["chinese_name"] if info and info["chinese_name"] else stock_id,
@@ -3337,6 +3897,7 @@ def get_stock_detail(stock_id: str) -> Dict[str, Any]:
             "realized_profit": round(float(realized), 2),
             "dividends_received": round(float(dividend), 2),
             "bonus_shares_received": round(float(bonus_shares), 4),
+            "yearly_dividends": yearly_dividends,
             "transactions": [
                 {
                     "id": tx["id"],
