@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Family Office 資產戰情儀表板</title>
+    <title>有價證券資產儀表板</title>
     <link
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
       rel="stylesheet"
@@ -220,6 +220,26 @@
       .badge-soft {
         border: 1px solid var(--line);
         color: var(--text-main);
+      }
+
+      .sortable-th { cursor: pointer; user-select: none; white-space: nowrap; }
+      .sortable-th:hover { color: var(--accent-a); }
+      .loan-overdue { background: rgba(255, 77, 79, 0.22) !important; }
+      .loan-danger  { background: rgba(255, 107, 107, 0.15) !important; }
+      .loan-warn    { background: rgba(255, 160, 0, 0.13) !important; }
+      .loan-caution { background: rgba(255, 214, 0, 0.10) !important; }
+
+      .price-refresh-dot {
+        display: inline-block;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+        animation: pulse-dot 1s infinite;
+        margin-right: 4px;
+      }
+      @keyframes pulse-dot {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
       }
 
       .source-badge {
@@ -615,13 +635,16 @@
       </div>
 
       <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-        <h3 class="mb-0">家族辦公室級資產戰情儀表板</h3>
+        <h3 class="mb-0">有價證券資產儀表板</h3>
         <div class="d-flex flex-wrap gap-2 align-items-center">
           <span class="status-pill">
             <span :class="['status-dot', (isRefreshing || backgroundRefreshInProgress) ? 'busy' : '']"></span>
             {{ (isRefreshing || backgroundRefreshInProgress) ? '同步中' : '系統就緒' }}
           </span>
           <span class="status-pill" v-if="lastRefreshAt">最後更新 {{ lastRefreshAt }}</span>
+          <span class="status-pill" v-if="priceAutoRefreshActive">
+            <span class="price-refresh-dot"></span>自動更新報價中
+          </span>
           <button class="btn btn-outline-light" @click="refreshAll" :disabled="isRefreshing">
             {{ isRefreshing ? '更新中...' : '重新整理' }}
           </button>
@@ -1393,8 +1416,11 @@
           <div class="col-12">
             <div class="glass table-shell">
               <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">元大證金借貸明細</h5>
-                <span class="badge rounded-pill badge-soft">{{ loansList.items.length }} 筆</span>
+                <div class="d-flex align-items-center gap-2">
+                  <h5 class="mb-0">借貸明細</h5>
+                  <span class="badge rounded-pill badge-soft">{{ loansList.items.length }} 筆</span>
+                </div>
+                <button class="btn btn-sm btn-neon" @click="openAddLoan">＋ 新增借款</button>
               </div>
 
               <div class="filter-row">
@@ -1416,32 +1442,135 @@
                 </div>
               </div>
 
+              <div class="d-flex gap-3 mb-2" style="font-size:0.78rem; color: var(--text-dim)">
+                <span><span style="display:inline-block;width:10px;height:10px;background:#ff4d4f;border-radius:2px;margin-right:4px"></span>逾期</span>
+                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,107,107,0.35);border-radius:2px;margin-right:4px"></span>30天內到期</span>
+                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,160,0,0.3);border-radius:2px;margin-right:4px"></span>60天內到期</span>
+                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,214,0,0.2);border-radius:2px;margin-right:4px"></span>90天內到期</span>
+              </div>
+
               <div class="table-scroll">
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
                       <th>借款機構</th>
-                      <th>擔保品</th>
-                      <th>借款本金</th>
-                      <th>利率</th>
-                      <th>起息日</th>
-                      <th>經過天數</th>
-                      <th>應繳利息</th>
+                      <th class="sortable-th" @click="toggleLoanSort('collateral')" title="點擊排序">擔保品 {{ loanSortIcon('collateral') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('collateral_lots')" title="點擊排序">抵押張數 {{ loanSortIcon('collateral_lots') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('principal')" title="點擊排序">借款本金 {{ loanSortIcon('principal') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('interest_rate')" title="點擊排序">利率 {{ loanSortIcon('interest_rate') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('start_date')" title="點擊排序">起息日 {{ loanSortIcon('start_date') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('due_date')" title="點擊排序">到期日 {{ loanSortIcon('due_date') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('accrued_interest')" title="點擊排序">應繳利息 {{ loanSortIcon('accrued_interest') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('maintenance_rate')" title="點擊排序">維持率 {{ loanSortIcon('maintenance_rate') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('net_proceeds')" title="點擊排序">實拿金額 {{ loanSortIcon('net_proceeds') }}</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="loan in filteredLoans" :key="loan.id">
+                    <tr v-for="loan in filteredLoans" :key="loan.id" :class="loanRowClass(loan)">
                       <td>{{ loan.lender }}</td>
-                      <td>{{ loan.collateral }}</td>
-                      <td>{{ fmt(loan.principal) }}</td>
-                      <td>{{ (loan.interest_rate * 100).toFixed(2) }}%</td>
+                      <td>
+                        <div>{{ loan.collateral }}</div>
+                        <div v-if="loan.collateral_name" style="color:var(--text-dim);font-size:0.8em;margin-top:1px">{{ loan.collateral_name }}</div>
+                      </td>
+                      <td>{{ loan.collateral_lots > 0 ? loan.collateral_lots : '—' }}</td>
+                      <td>
+                        <span v-if="loan.principal > 0">{{ fmt(loan.principal) }}</span>
+                        <span v-else class="badge" style="background:rgba(0,208,255,0.15);color:var(--accent-a);font-size:0.78rem;padding:2px 6px;border-radius:4px">純擔保</span>
+                      </td>
+                      <td>{{ loan.principal > 0 ? (loan.interest_rate * 100).toFixed(2) + '%' : '—' }}</td>
                       <td>{{ loan.start_date }}</td>
-                      <td>{{ loan.elapsed_days }}</td>
+                      <td>
+                        <div v-if="loan.due_date">{{ loan.due_date }}</div>
+                        <div v-if="loan.days_to_due !== null && loan.days_to_due !== undefined" style="font-size:0.8em;margin-top:1px">
+                          <span v-if="loan.days_to_due < 0" style="color:var(--danger);font-weight:600">已逾期 {{ Math.abs(loan.days_to_due) }} 天</span>
+                          <span v-else style="color:var(--text-dim)">剩 {{ loan.days_to_due }} 天</span>
+                        </div>
+                        <span v-if="!loan.due_date" style="color:var(--text-dim)">—</span>
+                      </td>
                       <td>{{ fmt(loan.accrued_interest) }}</td>
+                      <td>
+                        <span v-if="loan.maintenance_rate !== null && loan.maintenance_rate !== undefined"
+                          :style="{ color: loan.maintenance_rate < 140 ? 'var(--danger)' : loan.maintenance_rate < 167 ? 'var(--warn)' : 'var(--ok)', fontWeight: loan.maintenance_rate < 167 ? '600' : '400' }">
+                          {{ loan.maintenance_rate.toFixed(1) }}%
+                        </span>
+                        <span v-else style="color:var(--text-dim)">—</span>
+                      </td>
+                      <td :style="{ color: loan.net_proceeds >= 0 ? 'var(--ok)' : 'var(--danger)', fontWeight: '600' }">
+                        {{ loan.net_proceeds !== null ? fmt(loan.net_proceeds) : '—' }}
+                      </td>
+                      <td>
+                        <button class="btn btn-sm btn-outline-light me-1" style="padding:2px 8px;font-size:0.75rem" @click="openEditLoan(loan)">編輯</button>
+                        <button class="btn btn-sm btn-outline-danger" style="padding:2px 8px;font-size:0.75rem" @click="deleteLoan(loan)">刪除</button>
+                      </td>
                     </tr>
                   </tbody>
+                  <tfoot>
+                    <tr style="font-weight:600;border-top:1px solid var(--line)">
+                      <td colspan="2" style="color:var(--text-dim)">合計 {{ filteredLoans.length }} 筆</td>
+                      <td></td>
+                      <td>{{ fmt(loanTotals.principal) }}</td>
+                      <td></td><td></td><td></td>
+                      <td>{{ fmt(loanTotals.accrued_interest) }}</td>
+                      <td></td>
+                      <td :style="{ color: loanTotals.net_proceeds >= 0 ? 'var(--ok)' : 'var(--danger)' }">{{ fmt(loanTotals.net_proceeds) }}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增/編輯借款 Modal -->
+      <div v-if="showLoanModal" class="modal d-block" style="background: rgba(0,0,0,0.7)">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content glass" style="border-radius:16px">
+            <div class="modal-header border-bottom" style="border-color:var(--line) !important">
+              <h5 class="modal-title">{{ loanModalMode === 'add' ? '新增借款' : '編輯借款' }}</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showLoanModal = false"></button>
+            </div>
+            <div class="modal-body">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label">金融機構代號</label>
+                  <input v-model.trim="loanForm.lender" class="form-control" placeholder="4010" />
+                </div>
+                <div class="col-4">
+                  <label class="form-label">擔保品（股票代號）</label>
+                  <input v-model.trim="loanForm.collateral" class="form-control" placeholder="2330" @input="onCollateralInput" style="text-transform:uppercase" />
+                  <div v-if="loanCollateralName" style="font-size:0.8rem;color:var(--ok);margin-top:3px">{{ loanCollateralName }}</div>
+                  <div v-else-if="loanForm.collateral" style="font-size:0.8rem;color:var(--text-dim);margin-top:3px">查詢中…</div>
+                </div>
+                <div class="col-2">
+                  <label class="form-label">抵押張數</label>
+                  <input v-model.number="loanForm.collateral_lots" type="number" min="0" step="1" class="form-control" placeholder="0" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">借款本金（純擔保請填 0）</label>
+                  <input v-model.number="loanForm.principal" type="number" min="0" step="1" class="form-control" placeholder="0 = 純擔保" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">年利率（%）</label>
+                  <input v-model.number="loanForm.interest_rate" type="number" min="0" step="0.01" class="form-control" placeholder="1.85" :disabled="loanForm.principal === 0" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">起息日</label>
+                  <input v-model="loanForm.start_date" type="date" class="form-control" @change="onStartDateChange" />
+                </div>
+                <div class="col-6">
+                  <label class="form-label">到期日（預設一年半後）</label>
+                  <input v-model="loanForm.due_date" type="date" class="form-control" />
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer border-top" style="border-color:var(--line) !important">
+              <button class="btn btn-outline-light" @click="showLoanModal = false">取消</button>
+              <button class="btn btn-neon" @click="saveLoan" :disabled="loanSaving">
+                {{ loanSaving ? '儲存中...' : '儲存' }}
+              </button>
             </div>
           </div>
         </div>
@@ -2126,6 +2255,25 @@
               date_from: "",
               date_to: "",
             },
+            loanSort: { col: "collateral", dir: "asc" },
+            priceAutoRefreshTimer: null,
+            priceAutoRefreshActive: false,
+            showLoanModal: false,
+            loanModalMode: "add",
+            loanSaving: false,
+            loanCollateralName: "",
+            loanCollateralTimer: null,
+            loanForm: {
+              id: null,
+              lender: "",
+              collateral: "",
+              collateral_lots: 0,
+              principal: 0,
+              interest_rate: 0,
+              start_date: "",
+              due_date: "",
+              note: "",
+            },
             chatMessages: [
               { role: "ai", content: "已就緒。可詢問：如何改善資產配置、降低維持率風險、提升現金流。" },
             ],
@@ -2333,15 +2481,39 @@
             return Array.from(ids).sort((a, b) => a.localeCompare(b));
           },
           filteredLoans() {
-            if (!this.loanFilter.lender && !this.loanFilter.date_from && !this.loanFilter.date_to) {
-              return this.loansList.items;
+            let items = [...(this.loansList.items || [])];
+            if (this.loanFilter.lender || this.loanFilter.date_from || this.loanFilter.date_to) {
+              items = items.filter(loan => {
+                if (this.loanFilter.lender && !loan.lender.includes(this.loanFilter.lender)) return false;
+                if (this.loanFilter.date_from && loan.start_date < this.loanFilter.date_from) return false;
+                if (this.loanFilter.date_to && loan.start_date > this.loanFilter.date_to) return false;
+                return true;
+              });
             }
-            return this.loansList.items.filter(loan => {
-              if (this.loanFilter.lender && !loan.lender.includes(this.loanFilter.lender)) return false;
-              if (this.loanFilter.date_from && loan.start_date < this.loanFilter.date_from) return false;
-              if (this.loanFilter.date_to && loan.start_date > this.loanFilter.date_to) return false;
-              return true;
+            const { col, dir } = this.loanSort;
+            const sign = dir === "asc" ? 1 : -1;
+            items.sort((a, b) => {
+              const av = a[col] ?? "";
+              const bv = b[col] ?? "";
+              const cmp = typeof av === "number" && typeof bv === "number"
+                ? av - bv
+                : String(av).localeCompare(String(bv));
+              if (cmp !== 0) return cmp * sign;
+              // secondary: start_date asc always
+              if (col !== "start_date") {
+                return String(a.start_date || "").localeCompare(String(b.start_date || ""));
+              }
+              return 0;
             });
+            return items;
+          },
+          loanTotals() {
+            const rows = this.filteredLoans || [];
+            return {
+              principal: rows.reduce((acc, x) => acc + Number(x.principal || 0), 0),
+              accrued_interest: rows.reduce((acc, x) => acc + Number(x.accrued_interest || 0), 0),
+              net_proceeds: rows.reduce((acc, x) => acc + Number(x.net_proceeds || 0), 0),
+            };
           },
           txSummary() {
             const rows = this.filteredTransactions || [];
@@ -3247,11 +3419,169 @@
           clearTxFilter() {
             this.txFilter = { stock_id: "", date_from: "", date_to: "", only_active_holdings: false };
           },
-          applyLoanFilter() {
-            // Just trigger the computed property update
-          },
+          applyLoanFilter() {},
           clearLoanFilter() {
             this.loanFilter = { lender: "", date_from: "", date_to: "" };
+          },
+          toggleLoanSort(col) {
+            if (this.loanSort.col === col) {
+              this.loanSort.dir = this.loanSort.dir === "asc" ? "desc" : "asc";
+            } else {
+              this.loanSort = { col, dir: "asc" };
+            }
+          },
+          loanSortIcon(col) {
+            if (this.loanSort.col !== col) return "⇅";
+            return this.loanSort.dir === "asc" ? "↑" : "↓";
+          },
+          loanRowClass(loan) {
+            const d = loan.days_to_due;
+            if (d === null || d === undefined) return "";
+            if (d < 0) return "loan-overdue";
+            if (d < 30) return "loan-danger";
+            if (d < 60) return "loan-warn";
+            if (d < 90) return "loan-caution";
+            return "";
+          },
+          localDateStr(d) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          },
+          addMonths(dateStr, n) {
+            const parts = (dateStr || this.localDateStr(new Date())).split("-");
+            let y = parseInt(parts[0]), m = parseInt(parts[1]) - 1, day = parseInt(parts[2]);
+            m += n;
+            y += Math.floor(m / 12);
+            m = m % 12;
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            return `${y}-${String(m + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+          },
+          defaultDueDate(startDateStr) {
+            return this.addMonths(startDateStr || this.localDateStr(new Date()), 18);
+          },
+          onStartDateChange() {
+            if (this.loanModalMode === "add") {
+              this.loanForm.due_date = this.defaultDueDate(this.loanForm.start_date);
+            }
+          },
+          onCollateralInput() {
+            clearTimeout(this.loanCollateralTimer);
+            const sid = (this.loanForm.collateral || "").trim().toUpperCase();
+            if (!sid) { this.loanCollateralName = ""; return; }
+            this.loanCollateralTimer = setTimeout(async () => {
+              try {
+                const q = await this.fetchJson(`/api/stock/${encodeURIComponent(sid)}/quote`);
+                this.loanCollateralName = q.chinese_name || "";
+              } catch { this.loanCollateralName = ""; }
+            }, 500);
+          },
+          openAddLoan() {
+            this.loanModalMode = "add";
+            this.loanCollateralName = "";
+            const today = this.localDateStr(new Date());
+            this.loanForm = {
+              id: null,
+              lender: "",
+              collateral: "",
+              collateral_lots: 0,
+              principal: 0,
+              interest_rate: 0,
+              start_date: today,
+              due_date: this.defaultDueDate(today),
+              note: "",
+            };
+            this.showLoanModal = true;
+          },
+          openEditLoan(loan) {
+            this.loanModalMode = "edit";
+            this.loanCollateralName = loan.collateral_name || "";
+            this.loanForm = {
+              id: loan.id,
+              lender: loan.lender,
+              collateral: loan.collateral,
+              collateral_lots: loan.collateral_lots || 0,
+              principal: loan.principal,
+              interest_rate: parseFloat((loan.interest_rate * 100).toFixed(4)),
+              start_date: loan.start_date,
+              due_date: loan.due_date || this.defaultDueDate(loan.start_date),
+              note: loan.note || "",
+            };
+            this.showLoanModal = true;
+          },
+          async saveLoan() {
+            if (this.loanSaving) return;
+            this.loanSaving = true;
+            try {
+              const payload = {
+                lender: this.loanForm.lender.trim(),
+                collateral: this.loanForm.collateral.trim(),
+                collateral_lots: Number(this.loanForm.collateral_lots || 0),
+                principal: Number(this.loanForm.principal),
+                interest_rate: Number(this.loanForm.interest_rate),
+                start_date: this.loanForm.start_date,
+                due_date: this.loanForm.due_date || null,
+                note: this.loanForm.note || "",
+              };
+              const headers = { "Content-Type": "application/json" };
+              if (this.loanModalMode === "add") {
+                await this.fetchJson("/api/loans", { method: "POST", headers, body: JSON.stringify(payload) });
+                this.showToast("借款新增成功", "success");
+              } else {
+                await this.fetchJson(`/api/loans/${this.loanForm.id}`, { method: "PUT", headers, body: JSON.stringify(payload) });
+                this.showToast("借款更新成功", "success");
+              }
+              this.showLoanModal = false;
+              await Promise.all([
+                this.fetchJson("/api/loans/list").then(r => { this.loansList = r; }),
+                this.fetchJson("/api/loans/health").then(r => { this.loans = r; }),
+              ]);
+            } catch (err) {
+              this.showToast(`儲存失敗: ${err.message || err}`, "error");
+            } finally {
+              this.loanSaving = false;
+            }
+          },
+          async deleteLoan(loan) {
+            if (!confirm(`確定要刪除「${loan.lender}」的借款 ${this.fmt(loan.principal)} 嗎？`)) return;
+            try {
+              await this.fetchJson(`/api/loans/${loan.id}`, { method: "DELETE" });
+              this.showToast("借款已刪除", "success");
+              await Promise.all([
+                this.fetchJson("/api/loans/list").then(r => { this.loansList = r; }),
+                this.fetchJson("/api/loans/health").then(r => { this.loans = r; }),
+              ]);
+            } catch (err) {
+              this.showToast(`刪除失敗: ${err.message || err}`, "error");
+            }
+          },
+          isTaiwanTradingTime() {
+            const now = new Date();
+            const tw = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Taipei" }));
+            const day = tw.getDay();
+            if (day === 0 || day === 6) return false;
+            const mins = tw.getHours() * 60 + tw.getMinutes();
+            return mins >= 9 * 60 && mins <= 13 * 60 + 30;
+          },
+          startPriceAutoRefresh() {
+            if (this.priceAutoRefreshTimer) return;
+            this.priceAutoRefreshTimer = setInterval(async () => {
+              if (!this.isTaiwanTradingTime()) return;
+              this.priceAutoRefreshActive = true;
+              try {
+                await this.fetchJson("/api/stock/refresh-prices?scope=holdings&limit=200", { method: "POST" });
+                await Promise.all([
+                  this.fetchJson("/api/portfolio/summary").then(r => { this.summary = r; }),
+                  this.fetchJson("/api/portfolio/performance").then(r => { this.performance = r; }),
+                  this.fetchJson("/api/loans/health").then(r => { this.loans = r; }),
+                ]);
+              } catch (_) {}
+              finally { this.priceAutoRefreshActive = false; }
+            }, 15 * 60 * 1000);
+          },
+          stopPriceAutoRefresh() {
+            if (this.priceAutoRefreshTimer) {
+              clearInterval(this.priceAutoRefreshTimer);
+              this.priceAutoRefreshTimer = null;
+            }
           },
           async askAdvisor() {
             if (!this.chatInput || this.advisorLoading) return;
@@ -3301,9 +3631,11 @@
         },
         mounted() {
           this.refreshAll();
+          this.startPriceAutoRefresh();
         },
         beforeUnmount() {
           this.stopDividendRecalcPolling();
+          this.stopPriceAutoRefresh();
         },
       }).mount("#app");
     </script>

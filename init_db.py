@@ -87,6 +87,10 @@ def create_schema(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_stock_id ON transactions(stock_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_dividend_records_stock_id ON dividend_records(stock_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_dividend_records_date ON dividend_records(date)")
     conn.commit()
 
 

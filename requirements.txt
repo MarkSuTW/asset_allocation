@@ -1,6 +1,7 @@
-fastapi==0.116.0
-uvicorn[standard]==0.35.0
-pandas==2.3.1
-google-api-python-client==2.176.0
-google-auth==2.35.0
-google-auth-httplib2==0.2.0
+fastapi>=0.116,<0.120
+uvicorn[standard]>=0.35,<0.40
+pandas>=2.3,<2.5
+google-api-python-client>=2.176,<3.0
+google-auth>=2.35,<3.0
+google-auth-httplib2>=0.2,<0.3
+slowapi>=0.1.9,<0.2

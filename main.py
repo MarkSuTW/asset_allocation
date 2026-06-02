@@ -17,10 +17,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from app.core.utils import (
     get_yahoo_symbol_candidates,
@@ -40,13 +43,18 @@ _DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
 
 app = FastAPI(title="Family Office Dashboard API", version="1.0.0")
 
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+_limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 class TransactionCreate(BaseModel):
@@ -93,7 +101,6 @@ class CashDividendCreate(BaseModel):
     pay_date: Optional[str] = None
     amount_per_share: float = Field(ge=0)
     holding_shares: Optional[float] = Field(default=None, ge=0)
-    cash_amount: Optional[float] = Field(default=None, ge=0)
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -103,7 +110,6 @@ class CashDividendUpdate(BaseModel):
     pay_date: Optional[str] = None
     amount_per_share: float = Field(ge=0)
     holding_shares: float = Field(ge=0)
-    cash_amount: float = Field(ge=0)
     source: str = Field(default="manual")
     note: str = Field(default="")
 
@@ -132,6 +138,28 @@ class StockDividendUpdate(BaseModel):
     cash_return_per_share: float = Field(default=0, ge=0)
     cash_return_amount: float = Field(default=0, ge=0)
     source: str = Field(default="manual")
+    note: str = Field(default="")
+
+
+class LoanCreate(BaseModel):
+    lender: str
+    collateral: str
+    collateral_lots: float = Field(default=0, ge=0)
+    principal: float = Field(ge=0)
+    interest_rate: float = Field(ge=0)
+    start_date: str
+    due_date: Optional[str] = None
+    note: str = Field(default="")
+
+
+class LoanUpdate(BaseModel):
+    lender: str
+    collateral: str
+    collateral_lots: float = Field(default=0, ge=0)
+    principal: float = Field(ge=0)
+    interest_rate: float = Field(ge=0)
+    start_date: str
+    due_date: Optional[str] = None
     note: str = Field(default="")
 
 
@@ -737,6 +765,23 @@ def ensure_runtime_schema(conn: sqlite3.Connection) -> None:
     if needs_rebuild:
         rebuild_holdings_and_realized(conn)
         conn.commit()
+
+    loan_cols = {str(c[1]).lower() for c in conn.execute("PRAGMA table_info(loans)").fetchall()}
+    if "due_date" not in loan_cols:
+        conn.execute("ALTER TABLE loans ADD COLUMN due_date TEXT NOT NULL DEFAULT ''")
+    if "note" not in loan_cols:
+        conn.execute("ALTER TABLE loans ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+    if "collateral_lots" not in loan_cols:
+        conn.execute("ALTER TABLE loans ADD COLUMN collateral_lots REAL NOT NULL DEFAULT 0")
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_stock_id ON transactions(stock_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cash_dividends_stock_id ON cash_dividends(stock_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_cash_dividends_ex_date ON cash_dividends(ex_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_dividends_stock_id ON stock_dividends(stock_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_dividends_allot_date ON stock_dividends(allot_date)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON system_audit_logs(event_type)")
+    conn.commit()
 
     _RUNTIME_SCHEMA_READY = True
 
@@ -2735,7 +2780,7 @@ def expected_dividends_data(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 
 def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
-    rows = conn.execute("SELECT lender, collateral, principal, interest_rate, start_date FROM loans").fetchall()
+    rows = conn.execute("SELECT lender, collateral, collateral_lots, principal, interest_rate, start_date, due_date FROM loans").fetchall()
 
     total_principal = 0.0
     total_collateral = 0.0
@@ -2747,10 +2792,15 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         principal = float(row["principal"])
         total_principal += principal
 
-        collateral_raw = str(row["collateral"]).strip()
-        collateral_value = parse_numeric(collateral_raw)
-        if collateral_value <= 0:
-            collateral_value = get_stock_market_value(conn, collateral_raw)
+        collateral_sid = normalize_stock_id(str(row["collateral"]).strip())
+        collateral_lots = float(row["collateral_lots"] or 0)
+        stock_row = conn.execute("SELECT current_price FROM stock_info WHERE stock_id = ?", (collateral_sid,)).fetchone()
+        current_price = float(stock_row["current_price"] or 0) if stock_row else 0.0
+
+        if collateral_lots > 0 and current_price > 0:
+            collateral_value = collateral_lots * 1000 * current_price
+        else:
+            collateral_value = get_stock_market_value(conn, collateral_sid)
 
         total_collateral += collateral_value
 
@@ -2766,6 +2816,7 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
             rate = rate / 100.0
         interest = (principal * rate / 365.0) * days
         total_interest += interest
+        due_date = str(row["due_date"] or "").strip()
         loan_items.append(
             {
                 "lender": row["lender"],
@@ -2773,6 +2824,7 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
                 "principal": round(principal, 2),
                 "interest_rate": round(rate, 6),
                 "start_date": start_date,
+                "due_date": due_date,
                 "elapsed_days": days,
                 "accrued_interest": round(interest, 2),
                 "collateral_value": round(collateral_value, 2),
@@ -2969,40 +3021,76 @@ def list_loans(lender: Optional[str] = None, date_from: Optional[str] = None, da
         params.append(normalize_date(date_to))
     
     where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    today = date.today()
+    items = []
     with get_conn() as conn:
         rows = conn.execute(
-            f"SELECT id, lender, collateral, principal, interest_rate, start_date FROM loans {where_sql} ORDER BY start_date DESC",
+            f"SELECT id, lender, collateral, collateral_lots, principal, interest_rate, start_date, due_date, note FROM loans {where_sql} ORDER BY start_date DESC",
             params
         ).fetchall()
 
-    today = date.today()
-    items = []
-    for row in rows:
-        start_date = row["start_date"]
-        try:
-            d0 = datetime.fromisoformat(start_date).date()
-        except ValueError:
-            d0 = today
+        for row in rows:
+            start_date = row["start_date"]
+            try:
+                d0 = datetime.fromisoformat(start_date).date()
+            except ValueError:
+                d0 = today
 
-        days = max((today - d0).days, 0)
-        rate = float(row["interest_rate"])
-        if rate > 1:
-            rate = rate / 100.0
-        principal = float(row["principal"])
-        interest = (principal * rate / 365.0) * days
+            days = max((today - d0).days, 0)
+            rate = float(row["interest_rate"])
+            if rate > 1:
+                rate = rate / 100.0
+            principal = float(row["principal"])
+            interest = round((principal * rate / 365.0) * days, 2)
+            collateral_lots = float(row["collateral_lots"] or 0)
 
-        items.append(
-            {
-                "id": row["id"],
-                "lender": row["lender"],
-                "collateral": row["collateral"],
-                "principal": round(principal, 2),
-                "interest_rate": round(rate, 6),
-                "start_date": start_date,
-                "elapsed_days": days,
-                "accrued_interest": round(interest, 2),
-            }
-        )
+            due_date = str(row["due_date"] or "").strip()
+            days_to_due: Optional[int] = None
+            if due_date:
+                try:
+                    dd = datetime.fromisoformat(due_date).date()
+                    days_to_due = (dd - today).days
+                except ValueError:
+                    pass
+
+            collateral_sid = normalize_stock_id(str(row["collateral"]).strip())
+            stock_row = conn.execute(
+                "SELECT chinese_name, current_price FROM stock_info WHERE stock_id = ?", (collateral_sid,)
+            ).fetchone()
+            collateral_name = str(stock_row["chinese_name"] or "").strip() if stock_row else ""
+            current_price = float(stock_row["current_price"] or 0) if stock_row else 0.0
+
+            # 維持率分子：以抵押張數 × 1000 × 市價為準；若未填張數則嘗試直接金額
+            if collateral_lots > 0 and current_price > 0:
+                collateral_value = collateral_lots * 1000 * current_price
+            else:
+                collateral_value = get_stock_market_value(conn, collateral_sid)
+
+            maintenance_rate = round((collateral_value / principal) * 100, 2) if principal > 0 else None
+            # 純擔保（principal=0）：實拿 = 抵押市值；有借款：實拿 = 抵押市值 - 本金 - 利息
+            net_proceeds = round(collateral_value - principal - interest, 2)
+
+            items.append(
+                {
+                    "id": row["id"],
+                    "lender": row["lender"],
+                    "collateral": row["collateral"],
+                    "collateral_name": collateral_name,
+                    "collateral_lots": collateral_lots,
+                    "current_price": round(current_price, 2),
+                    "principal": round(principal, 2),
+                    "interest_rate": round(rate, 6),
+                    "start_date": start_date,
+                    "due_date": due_date,
+                    "days_to_due": days_to_due,
+                    "elapsed_days": days,
+                    "accrued_interest": interest,
+                    "collateral_value": round(collateral_value, 2),
+                    "maintenance_rate": maintenance_rate,
+                    "net_proceeds": net_proceeds,
+                    "note": str(row["note"] or ""),
+                }
+            )
 
     return {"items": items}
 
@@ -3011,6 +3099,65 @@ def list_loans(lender: Optional[str] = None, date_from: Optional[str] = None, da
 def get_loans_health() -> Dict[str, Any]:
     with get_conn() as conn:
         return loans_health_data(conn)
+
+
+def _default_due_date(start_iso: str) -> str:
+    try:
+        d = datetime.fromisoformat(start_iso).date()
+        year = d.year + ((d.month + 17) // 12)
+        month = ((d.month + 17) % 12) + 1
+        import calendar
+        last_day = calendar.monthrange(year, month)[1]
+        day = min(d.day, last_day)
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return ""
+
+
+@app.post("/api/loans")
+def create_loan(payload: LoanCreate) -> Dict[str, Any]:
+    start_date = normalize_date(payload.start_date)
+    due_date = normalize_date(payload.due_date) if payload.due_date else _default_due_date(start_date)
+    rate = float(payload.interest_rate)
+    if rate > 1:
+        rate = rate / 100.0
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO loans (lender, collateral, collateral_lots, principal, interest_rate, start_date, due_date, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (payload.lender.strip(), payload.collateral.strip(), float(payload.collateral_lots), float(payload.principal), rate, start_date, due_date, payload.note or ""),
+        )
+        conn.commit()
+    return {"message": "loan created", "id": int(cur.lastrowid)}
+
+
+@app.put("/api/loans/{loan_id}")
+def update_loan(loan_id: int, payload: LoanUpdate) -> Dict[str, Any]:
+    start_date = normalize_date(payload.start_date)
+    due_date = normalize_date(payload.due_date) if payload.due_date else _default_due_date(start_date)
+    rate = float(payload.interest_rate)
+    if rate > 1:
+        rate = rate / 100.0
+    with get_conn() as conn:
+        exists = conn.execute("SELECT id FROM loans WHERE id = ?", (loan_id,)).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="loan not found")
+        conn.execute(
+            "UPDATE loans SET lender = ?, collateral = ?, collateral_lots = ?, principal = ?, interest_rate = ?, start_date = ?, due_date = ?, note = ? WHERE id = ?",
+            (payload.lender.strip(), payload.collateral.strip(), float(payload.collateral_lots), float(payload.principal), rate, start_date, due_date, payload.note or "", loan_id),
+        )
+        conn.commit()
+    return {"message": "loan updated", "id": loan_id}
+
+
+@app.delete("/api/loans/{loan_id}")
+def delete_loan(loan_id: int) -> Dict[str, Any]:
+    with get_conn() as conn:
+        exists = conn.execute("SELECT id FROM loans WHERE id = ?", (loan_id,)).fetchone()
+        if not exists:
+            raise HTTPException(status_code=404, detail="loan not found")
+        conn.execute("DELETE FROM loans WHERE id = ?", (loan_id,))
+        conn.commit()
+    return {"message": "loan deleted", "id": loan_id}
 
 
 @app.get("/api/settings/transaction-tax")
@@ -3432,7 +3579,7 @@ def create_cash_dividend(payload: CashDividendCreate) -> Dict[str, Any]:
     with get_conn() as conn:
         ensure_stock_info(conn, sid)
         holding_shares = float(payload.holding_shares) if payload.holding_shares is not None else get_shares_on_date(conn, sid, ex_date)
-        cash_amount = float(payload.cash_amount) if payload.cash_amount is not None else round(holding_shares * float(payload.amount_per_share), 2)
+        cash_amount = round(holding_shares * float(payload.amount_per_share), 2)
 
         cur = conn.execute(
             """
@@ -3459,6 +3606,7 @@ def create_cash_dividend(payload: CashDividendCreate) -> Dict[str, Any]:
 def update_cash_dividend(dividend_id: int, payload: CashDividendUpdate) -> Dict[str, Any]:
     ex_date = normalize_date(payload.ex_date)
     pay_date = normalize_date(payload.pay_date) if payload.pay_date else ex_date
+    cash_amount_gross = round(float(payload.holding_shares) * float(payload.amount_per_share), 2)
     with get_conn() as conn:
         exists = conn.execute("SELECT id FROM cash_dividends WHERE id = ?", (dividend_id,)).fetchone()
         if not exists:
@@ -3475,7 +3623,7 @@ def update_cash_dividend(dividend_id: int, payload: CashDividendUpdate) -> Dict[
                 pay_date,
                 float(payload.amount_per_share),
                 float(payload.holding_shares),
-                float(payload.cash_amount),
+                cash_amount_gross,
                 (payload.source or "manual").strip() or "manual",
                 payload.note or "",
                 dividend_id,
@@ -4089,7 +4237,8 @@ def get_stock_detail(stock_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/ai/advisor")
-def advisor(payload: AdvisorRequest) -> Dict[str, Any]:
+@_limiter.limit("10/minute")
+def advisor(request: Request, payload: AdvisorRequest) -> Dict[str, Any]:
     with get_conn() as conn:
         snapshot = build_advisor_snapshot(conn)
 
