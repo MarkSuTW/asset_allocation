@@ -505,14 +505,29 @@ def run_etl(data_dir: Path, db_path: Path) -> Dict[str, int]:
         conn.close()
 
 
+def create_empty_db(db_path: Path) -> None:
+    """Create an empty but fully-initialised wealth.db (no CSV data needed)."""
+    conn = sqlite3.connect(db_path)
+    create_schema(conn)
+    conn.close()
+    print(f"Empty database created: {db_path}")
+    print("Start the app and all runtime tables will be created automatically on first request.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Initialize wealth.db from data/*.csv")
     parser.add_argument("--data-dir", default=str(DATA_DIR), help="CSV data directory")
     parser.add_argument("--db-path", default=str(DB_PATH), help="SQLite DB path")
+    parser.add_argument("--empty", action="store_true", help="Create an empty DB (no CSV import needed)")
     args = parser.parse_args()
 
-    data_dir = Path(args.data_dir)
     db_path = Path(args.db_path)
+
+    if args.empty:
+        create_empty_db(db_path)
+        return
+
+    data_dir = Path(args.data_dir)
 
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
