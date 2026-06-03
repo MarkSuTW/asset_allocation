@@ -1576,6 +1576,30 @@
         </div>
       </div>
 
+      <!-- 刪除借款確認 Modal -->
+      <div v-if="showDeleteLoanConfirm" class="modal d-block" style="background:rgba(0,0,0,0.7)">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+          <div class="modal-content glass" style="border-radius:16px">
+            <div class="modal-header border-bottom" style="border-color:var(--line) !important">
+              <h5 class="modal-title" style="color:var(--danger)">確認刪除</h5>
+              <button type="button" class="btn-close btn-close-white" @click="showDeleteLoanConfirm=false;deleteLoanTarget=null"></button>
+            </div>
+            <div class="modal-body" v-if="deleteLoanTarget">
+              <p>確定要刪除以下借款記錄？此操作無法復原。</p>
+              <div class="glass-light p-2" style="font-size:0.9rem">
+                <div>機構：{{ deleteLoanTarget.lender }}</div>
+                <div>擔保品：{{ deleteLoanTarget.collateral }} {{ deleteLoanTarget.collateral_name }}</div>
+                <div>本金：{{ fmt(deleteLoanTarget.principal) }}</div>
+              </div>
+            </div>
+            <div class="modal-footer border-top" style="border-color:var(--line) !important">
+              <button class="btn btn-outline-light" @click="showDeleteLoanConfirm=false;deleteLoanTarget=null">取消</button>
+              <button class="btn btn-danger" @click="confirmDeleteLoan">確認刪除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 單檔股票詳情Modal -->
       <div v-if="showStockModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
         <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -1795,7 +1819,7 @@
                   <input v-model.number="txForm.price" type="number" min="0" step="0.01" class="form-control" />
                 </div>
                 <div class="col-12">
-                  <label class="form-label">手續費</label>
+                  <label class="form-label" title="手續費：一般交易 0.1425%（6 折最低 20 元），定期定額固定 1 元。&#10;交易稅：賣出時自動計算 — 股票 0.3%、ETF 0.1%、債券 0.1%；買進為 0。">手續費 &amp; 交易稅 ℹ</label>
                   <div class="d-flex gap-2 mb-2">
                     <select v-model="txForm.fee_mode" class="form-select" style="max-width: 230px">
                       <option value="auto">系統計算</option>
@@ -2260,6 +2284,8 @@
             priceAutoRefreshActive: false,
             showLoanModal: false,
             loanModalMode: "add",
+            showDeleteLoanConfirm: false,
+            deleteLoanTarget: null,
             loanSaving: false,
             loanCollateralName: "",
             loanCollateralTimer: null,
@@ -3540,8 +3566,15 @@
               this.loanSaving = false;
             }
           },
-          async deleteLoan(loan) {
-            if (!confirm(`確定要刪除「${loan.lender}」的借款 ${this.fmt(loan.principal)} 嗎？`)) return;
+          deleteLoan(loan) {
+            this.deleteLoanTarget = loan;
+            this.showDeleteLoanConfirm = true;
+          },
+          async confirmDeleteLoan() {
+            const loan = this.deleteLoanTarget;
+            if (!loan) return;
+            this.showDeleteLoanConfirm = false;
+            this.deleteLoanTarget = null;
             try {
               await this.fetchJson(`/api/loans/${loan.id}`, { method: "DELETE" });
               this.showToast("借款已刪除", "success");

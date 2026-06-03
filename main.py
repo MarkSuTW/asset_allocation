@@ -57,6 +57,14 @@ app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
+@app.on_event("startup")
+def _startup_init() -> None:
+    """Pre-warm DB schema and stock-info integrity on server start."""
+    if DB_PATH.exists():
+        with get_conn() as conn:
+            conn  # get_conn() already calls ensure_runtime_schema + auto_repair
+
+
 class TransactionCreate(BaseModel):
     date: str
     stock_id: str
@@ -104,14 +112,6 @@ class CashDividendCreate(BaseModel):
     source: str = Field(default="manual")
     note: str = Field(default="")
 
-
-class CashDividendUpdate(BaseModel):
-    ex_date: str
-    pay_date: Optional[str] = None
-    amount_per_share: float = Field(ge=0)
-    holding_shares: float = Field(ge=0)
-    source: str = Field(default="manual")
-    note: str = Field(default="")
 
 
 class StockDividendCreate(BaseModel):
@@ -793,9 +793,36 @@ def ensure_runtime_schema(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_dividends_stock_id ON stock_dividends(stock_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_stock_dividends_allot_date ON stock_dividends(allot_date)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_event_type ON system_audit_logs(event_type)")
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+            description TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    _apply_pending_migrations(conn)
     conn.commit()
 
     _RUNTIME_SCHEMA_READY = True
+
+
+_SCHEMA_MIGRATIONS = [
+    (1, "add loan fields: due_date, note, collateral_lots"),
+    (2, "add cash_dividends and stock_dividends indexes"),
+]
+
+
+def _apply_pending_migrations(conn: sqlite3.Connection) -> None:
+    applied = {r[0] for r in conn.execute("SELECT version FROM schema_migrations").fetchall()}
+    for version, description in _SCHEMA_MIGRATIONS:
+        if version not in applied:
+            conn.execute(
+                "INSERT INTO schema_migrations (version, description) VALUES (?, ?)",
+                (version, description),
+            )
 
 
 def get_conn(auto_repair: bool = True) -> sqlite3.Connection:
@@ -1603,7 +1630,7 @@ def _sync_dividends_for_stock(conn: sqlite3.Connection, sid: str, years: int = 2
                                 AND o.id <> y.id
                                 AND o.source <> 'yahoo_auto'
                                 AND SUBSTR(o.ex_date, 1, 4) = SUBSTR(y.ex_date, 1, 4)
-                                AND ABS(julianday(o.ex_date) - julianday(y.ex_date)) <= 10
+                                AND ABS(julianday(o.ex_date) - julianday(y.ex_date)) <= 3
                     )
                 """,
                 (sid,),
@@ -2180,6 +2207,19 @@ def upsert_stock_quote(conn: sqlite3.Connection, stock_id: str, chinese_name: Op
 
     params.append(sid)
     conn.execute(f"UPDATE stock_info SET {', '.join(updates)} WHERE stock_id = ?", params)
+
+
+def _resolve_collateral_value(conn: sqlite3.Connection, collateral_sid: str, collateral_lots: float) -> tuple:
+    """Returns (current_price, collateral_value) using lots*1000*price when lots>0, else total holdings value."""
+    stock_row = conn.execute(
+        "SELECT current_price FROM stock_info WHERE stock_id = ?", (collateral_sid,)
+    ).fetchone()
+    current_price = float(stock_row["current_price"] or 0) if stock_row else 0.0
+    if collateral_lots > 0 and current_price > 0:
+        collateral_value = collateral_lots * 1000 * current_price
+    else:
+        collateral_value = get_stock_market_value(conn, collateral_sid)
+    return current_price, collateral_value
 
 
 def get_stock_market_value(conn: sqlite3.Connection, stock_id: str) -> float:
@@ -2819,13 +2859,7 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
 
         collateral_sid = normalize_stock_id(str(row["collateral"]).strip())
         collateral_lots = float(row["collateral_lots"] or 0)
-        stock_row = conn.execute("SELECT current_price FROM stock_info WHERE stock_id = ?", (collateral_sid,)).fetchone()
-        current_price = float(stock_row["current_price"] or 0) if stock_row else 0.0
-
-        if collateral_lots > 0 and current_price > 0:
-            collateral_value = collateral_lots * 1000 * current_price
-        else:
-            collateral_value = get_stock_market_value(conn, collateral_sid)
+        _, collateral_value = _resolve_collateral_value(conn, collateral_sid, collateral_lots)
 
         total_collateral += collateral_value
 
@@ -3077,17 +3111,11 @@ def list_loans(lender: Optional[str] = None, date_from: Optional[str] = None, da
                     pass
 
             collateral_sid = normalize_stock_id(str(row["collateral"]).strip())
-            stock_row = conn.execute(
-                "SELECT chinese_name, current_price FROM stock_info WHERE stock_id = ?", (collateral_sid,)
+            collateral_name_row = conn.execute(
+                "SELECT chinese_name FROM stock_info WHERE stock_id = ?", (collateral_sid,)
             ).fetchone()
-            collateral_name = str(stock_row["chinese_name"] or "").strip() if stock_row else ""
-            current_price = float(stock_row["current_price"] or 0) if stock_row else 0.0
-
-            # 維持率分子：以抵押張數 × 1000 × 市價為準；若未填張數則嘗試直接金額
-            if collateral_lots > 0 and current_price > 0:
-                collateral_value = collateral_lots * 1000 * current_price
-            else:
-                collateral_value = get_stock_market_value(conn, collateral_sid)
+            collateral_name = str(collateral_name_row["chinese_name"] or "").strip() if collateral_name_row else ""
+            current_price, collateral_value = _resolve_collateral_value(conn, collateral_sid, collateral_lots)
 
             maintenance_rate = round((collateral_value / principal) * 100, 2) if principal > 0 else None
             # 純擔保（principal=0）：實拿 = 抵押市值；有借款：實拿 = 抵押市值 - 本金 - 利息
@@ -3626,37 +3654,6 @@ def create_cash_dividend(payload: CashDividendCreate) -> Dict[str, Any]:
 
     return {"message": "cash dividend created", "id": int(cur.lastrowid)}
 
-
-@app.put("/api/dividends/cash/{dividend_id}")
-def update_cash_dividend(dividend_id: int, payload: CashDividendUpdate) -> Dict[str, Any]:
-    ex_date = normalize_date(payload.ex_date)
-    pay_date = normalize_date(payload.pay_date) if payload.pay_date else ex_date
-    cash_amount_gross = round(float(payload.holding_shares) * float(payload.amount_per_share), 2)
-    with get_conn() as conn:
-        exists = conn.execute("SELECT id FROM cash_dividends WHERE id = ?", (dividend_id,)).fetchone()
-        if not exists:
-            raise HTTPException(status_code=404, detail="cash dividend not found")
-
-        conn.execute(
-            """
-            UPDATE cash_dividends
-            SET ex_date = ?, pay_date = ?, amount_per_share = ?, holding_shares = ?, cash_amount = ?, source = ?, note = ?
-            WHERE id = ?
-            """,
-            (
-                ex_date,
-                pay_date,
-                float(payload.amount_per_share),
-                float(payload.holding_shares),
-                cash_amount_gross,
-                (payload.source or "manual").strip() or "manual",
-                payload.note or "",
-                dividend_id,
-            ),
-        )
-        conn.commit()
-
-    return {"message": "cash dividend updated", "id": dividend_id}
 
 
 @app.delete("/api/dividends/cash/{dividend_id}")
