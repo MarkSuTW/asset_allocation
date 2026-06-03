@@ -81,9 +81,12 @@ def create_schema(conn: sqlite3.Connection) -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lender TEXT NOT NULL,
             collateral TEXT NOT NULL,
+            collateral_lots REAL NOT NULL DEFAULT 0,
             principal REAL NOT NULL,
             interest_rate REAL NOT NULL,
-            start_date TEXT NOT NULL
+            start_date TEXT NOT NULL,
+            due_date TEXT NOT NULL DEFAULT '',
+            note TEXT NOT NULL DEFAULT ''
         )
         """
     )
@@ -98,6 +101,16 @@ def reset_data(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
     cur.execute("DELETE FROM transactions")
     cur.execute("DELETE FROM dividend_records")
+    # Runtime schema uses cash_dividends / stock_dividends; clear them too
+    # so re-import does not keep stale corporate-action rows from old data.
+    existing_tables = {
+        r[0]
+        for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
+    if "cash_dividends" in existing_tables:
+        cur.execute("DELETE FROM cash_dividends")
+    if "stock_dividends" in existing_tables:
+        cur.execute("DELETE FROM stock_dividends")
     cur.execute("DELETE FROM holdings")
     cur.execute("DELETE FROM loans")
     cur.execute("DELETE FROM stock_info")
@@ -320,7 +333,13 @@ def find_header_row(rows: List[List[str]], required_tokens: List[str], max_scan:
     return None
 
 
-def parse_stock_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]], encoding: str) -> Tuple[int, int]:
+def parse_stock_file(
+    conn: sqlite3.Connection,
+    path: Path,
+    rows: List[List[str]],
+    encoding: str,
+    parse_dividends: bool = True,
+) -> Tuple[int, int]:
     stock_id = parse_stock_id_from_filename(path)
     if not stock_id:
         return 0, 0
@@ -389,29 +408,30 @@ def parse_stock_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]]
                 latest_price = price
                 tx_count += 1
 
-    # 除權息區：常見欄位「年度,除權息日,...,總計股息,補充健保費,實領...」
-    div_header = find_header_row(rows, ["除權"], max_scan=30)
-    if div_header is not None:
-        div_df = load_df(path, encoding, div_header)
-        div_df.columns = [normalize_text(c) for c in div_df.columns]
+    if parse_dividends:
+        # 除權息區：常見欄位「年度,除權息日,...,總計股息,補充健保費,實領...」
+        div_header = find_header_row(rows, ["除權"], max_scan=30)
+        if div_header is not None:
+            div_df = load_df(path, encoding, div_header)
+            div_df.columns = [normalize_text(c) for c in div_df.columns]
 
-        date_col = find_col(div_df.columns, ["股利發放日", "除權息日", "日期", "date"])
-        amount_col = find_col(div_df.columns, ["實領", "總計股息", "現金股利", "股利", "股息"])
+            date_col = find_col(div_df.columns, ["股利發放日", "除權息日", "日期", "date"])
+            amount_col = find_col(div_df.columns, ["實領", "總計股息", "現金股利", "股利", "股息"])
 
-        if date_col and amount_col:
-            for _, row in div_df.iterrows():
-                amount = clean_numeric(row.get(amount_col, 0))
-                if amount <= 0:
-                    continue
-                d = normalize_date(row.get(date_col))
-                conn.execute(
-                    """
-                    INSERT INTO dividend_records (stock_id, date, amount)
-                    VALUES (?, ?, ?)
-                    """,
-                    (stock_id, d, amount),
-                )
-                div_count += 1
+            if date_col and amount_col:
+                for _, row in div_df.iterrows():
+                    amount = clean_numeric(row.get(amount_col, 0))
+                    if amount <= 0:
+                        continue
+                    d = normalize_date(row.get(date_col))
+                    conn.execute(
+                        """
+                        INSERT INTO dividend_records (stock_id, date, amount)
+                        VALUES (?, ?, ?)
+                        """,
+                        (stock_id, d, amount),
+                    )
+                    div_count += 1
 
     if latest_price > 0:
         conn.execute("UPDATE stock_info SET current_price = ? WHERE stock_id = ?", (latest_price, stock_id))
@@ -432,13 +452,15 @@ def parse_loan_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]],
     principal_col = find_col(df.columns, ["已借金額", "借款金額", "本金", "principal"])
     rate_col = find_col(df.columns, ["利率", "年利率", "interest_rate"])
     date_col = find_col(df.columns, ["起息日", "開始日", "date"])
-    collateral_col = find_col(df.columns, ["總市值", "擔保品", "collateral"])
+    lots_col = find_col(df.columns, ["張數", "抵押張數", "collateral_lots", "lots"])
 
     inserted = 0
     for _, row in df.iterrows():
-        stock_id = normalize_text(row.get(stock_col, "")) if stock_col else ""
+        stock_id = normalize_text(row.get(stock_col, "")).upper() if stock_col else ""
+        if stock_id and not re.match(r"^[0-9]{4,5}[A-Z]?$", stock_id):
+            continue
         principal = clean_numeric(row.get(principal_col, 0)) if principal_col else 0.0
-        if principal <= 0:
+        if principal <= 0 or not stock_id:
             continue
 
         rate = clean_numeric(row.get(rate_col, 0)) if rate_col else 0.0
@@ -446,15 +468,15 @@ def parse_loan_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]],
             rate = rate / 100.0
 
         start_date = normalize_date(row.get(date_col)) if date_col else datetime.today().date().isoformat()
-        collateral_value = clean_numeric(row.get(collateral_col, 0)) if collateral_col else 0.0
-        collateral = str(collateral_value) if collateral_value > 0 else stock_id
+        collateral_lots = clean_numeric(row.get(lots_col, 0)) if lots_col else 0.0
+        collateral = stock_id
 
         conn.execute(
             """
-            INSERT INTO loans (lender, collateral, principal, interest_rate, start_date)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO loans (lender, collateral, collateral_lots, principal, interest_rate, start_date)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            ("元大證金", collateral, principal, rate, start_date),
+            ("元大證金", collateral, collateral_lots, principal, rate, start_date),
         )
         inserted += 1
 
@@ -465,7 +487,7 @@ def parse_loan_file(conn: sqlite3.Connection, path: Path, rows: List[List[str]],
     return inserted
 
 
-def run_etl(data_dir: Path, db_path: Path) -> Dict[str, int]:
+def run_etl(data_dir: Path, db_path: Path, parse_dividends: bool = True) -> Dict[str, int]:
     conn = sqlite3.connect(db_path)
     try:
         create_schema(conn)
@@ -493,7 +515,7 @@ def run_etl(data_dir: Path, db_path: Path) -> Dict[str, int]:
             if not stock_id:
                 continue
 
-            tx, div = parse_stock_file(conn, path, rows, encoding)
+            tx, div = parse_stock_file(conn, path, rows, encoding, parse_dividends=parse_dividends)
             if tx > 0 or div > 0:
                 stats["stock_info"] += 1
             stats["transactions"] += tx
@@ -519,6 +541,11 @@ def main() -> None:
     parser.add_argument("--data-dir", default=str(DATA_DIR), help="CSV data directory")
     parser.add_argument("--db-path", default=str(DB_PATH), help="SQLite DB path")
     parser.add_argument("--empty", action="store_true", help="Create an empty DB (no CSV import needed)")
+    parser.add_argument(
+        "--transactions-only",
+        action="store_true",
+        help="Import transactions/loans only and skip dividend section parsing",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db_path)
@@ -532,7 +559,7 @@ def main() -> None:
     if not data_dir.exists():
         raise FileNotFoundError(f"Data directory not found: {data_dir}")
 
-    stats = run_etl(data_dir, db_path)
+    stats = run_etl(data_dir, db_path, parse_dividends=not args.transactions_only)
     print("ETL finished:")
     for k, v in stats.items():
         print(f"  {k}: {v}")

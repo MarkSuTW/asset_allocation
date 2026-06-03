@@ -288,6 +288,31 @@
         word-break: break-all;
       }
 
+      .tx-fee-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.12rem 0.45rem;
+        border-radius: 999px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        margin-top: 0.2rem;
+        border: 1px solid transparent;
+        line-height: 1.2;
+      }
+
+      .tx-fee-badge.auto {
+        background: rgba(28, 201, 150, 0.16);
+        color: #8ff5cf;
+        border-color: rgba(28, 201, 150, 0.35);
+      }
+
+      .tx-fee-badge.manual {
+        background: rgba(79, 125, 255, 0.16);
+        color: #b7cbff;
+        border-color: rgba(79, 125, 255, 0.35);
+      }
+
       .btn-neon {
         border: 1px solid rgba(0, 208, 255, 0.45);
         color: #d8f9ff;
@@ -356,6 +381,261 @@
       .setting-panel-subtitle {
         font-size: 0.82rem;
         color: var(--text-dim);
+      }
+
+      .system-tool-block {
+        border: 1px solid rgba(143, 160, 187, 0.2);
+        border-radius: 12px;
+        padding: 0.75rem;
+        background: rgba(10, 18, 38, 0.45);
+      }
+
+      .system-tool-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .system-tool-actions .btn {
+        min-width: 160px;
+      }
+
+      .system-tool-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.24rem 0.62rem;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        font-size: 0.74rem;
+        color: var(--text-dim);
+      }
+
+      .system-tool-status.busy {
+        color: #ffe2a3;
+        border-color: rgba(255, 200, 87, 0.5);
+        background: rgba(255, 200, 87, 0.08);
+      }
+
+      .system-tool-message {
+        color: var(--text-dim);
+      }
+
+      .panel-divider {
+        border-color: var(--line);
+      }
+
+      .text-dim-small {
+        color: var(--text-dim);
+      }
+
+      .text-dim-xs {
+        font-size: 0.82rem;
+        color: var(--text-dim);
+      }
+
+      .compact-input-label {
+        font-size: 0.78rem;
+      }
+
+      .input-w-100 {
+        width: 100px;
+      }
+
+      .input-w-110 {
+        width: 110px;
+      }
+
+      .input-max-230 {
+        max-width: 230px;
+      }
+
+      .progress-thin {
+        height: 10px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .table-scroll-280 {
+        max-height: 280px;
+      }
+
+      .table-scroll-180 {
+        max-height: 180px;
+      }
+
+      .table-scroll-220 {
+        max-height: 220px;
+      }
+
+      .table-scroll-300 {
+        max-height: 300px;
+      }
+
+      .table-scroll-55vh {
+        max-height: 55vh;
+      }
+
+      .modal-mask {
+        background: rgba(0, 0, 0, 0.7);
+      }
+
+      .modal-content-rounded {
+        border-radius: 16px;
+      }
+
+      .modal-section-border {
+        border-color: var(--line) !important;
+      }
+
+      .modal-dialog-compact {
+        max-width: 400px;
+      }
+
+      .text-dim-80 {
+        font-size: 0.8rem;
+        color: var(--text-dim);
+      }
+
+      .text-dim-78 {
+        font-size: 0.78rem;
+        color: var(--text-dim);
+      }
+
+      .text-dim-75 {
+        font-size: 0.75rem;
+        color: var(--text-dim);
+      }
+
+      .text-dim-76 {
+        font-size: 0.76rem;
+        color: var(--text-dim);
+      }
+
+      .text-strong {
+        font-weight: 600;
+      }
+
+      .mt-tight {
+        margin-top: 0.2rem;
+      }
+
+      .mt-tight-sm {
+        margin-top: 0.15rem;
+      }
+
+      .mb-legend {
+        margin-bottom: 0.75rem;
+      }
+
+      .summary-strip-loan {
+        margin-bottom: 0.6rem;
+      }
+
+      .loan-legend-dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        margin-right: 3px;
+      }
+
+      .loan-legend-dot.overdue {
+        background: #ff4d4f;
+      }
+
+      .loan-legend-dot.d30 {
+        background: rgba(255, 107, 107, 0.6);
+      }
+
+      .loan-legend-dot.d60 {
+        background: rgba(255, 160, 0, 0.7);
+      }
+
+      .loan-legend-dot.d90 {
+        background: rgba(255, 214, 0, 0.8);
+      }
+
+      .badge-collateral-only {
+        background: rgba(0, 208, 255, 0.15);
+        color: var(--accent-a);
+        font-size: 0.78rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+
+      .btn-compact-xs {
+        padding: 2px 8px;
+        font-size: 0.75rem;
+      }
+
+      .btn-icon-xs {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.75rem;
+      }
+
+      .chat-dialog-compact {
+        max-width: 450px;
+        margin: 0 auto;
+      }
+
+      .chat-modal-rounded {
+        border-radius: 16px;
+      }
+
+      .chat-modal-footer {
+        border-color: var(--line) !important;
+      }
+
+      .chat-fab {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 999;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+      }
+
+      .loan-total-row {
+        font-weight: 600;
+        border-top: 1px solid var(--line);
+      }
+
+      .form-check-dim-clickable {
+        color: var(--text-dim);
+        cursor: pointer;
+      }
+
+      .kpi-delay-05 { animation-delay: 0.05s; }
+      .kpi-delay-10 { animation-delay: 0.10s; }
+      .kpi-delay-15 { animation-delay: 0.15s; }
+      .kpi-delay-20 { animation-delay: 0.20s; }
+      .kpi-delay-25 { animation-delay: 0.25s; }
+
+      .kpi-note-stack {
+        margin-top: 0.4rem;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .kpi-inline-sm {
+        font-size: 0.82rem;
+      }
+
+      .kpi-inline-accent {
+        color: var(--accent-a);
+      }
+
+      @media (max-width: 768px) {
+        .system-tool-actions .btn {
+          min-width: 0;
+          flex: 1 1 calc(50% - 0.5rem);
+        }
       }
 
       .nav-tabs {
@@ -909,7 +1189,7 @@
         <div class="row g-3 mb-3">
 
           <!-- 庫存總市值 -->
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.05s">
+          <div class="col-6 col-xl kpi-card glass kpi-delay-05">
             <div class="kpi-stripe kpi-stripe-cyan"></div>
             <div class="kpi-icon">📦</div>
             <div class="label">庫存總市值</div>
@@ -918,7 +1198,7 @@
           </div>
 
           <!-- 累計淨損益（含未實現） -->
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.10s">
+          <div class="col-6 col-xl kpi-card glass kpi-delay-10">
             <div class="kpi-stripe kpi-stripe-green"></div>
             <div class="kpi-icon">🏆</div>
             <div class="label" title="已實現淨利 + 已領股息 + 未實現損益；所有費用已內含。">累計淨損益（含未實現）</div>
@@ -929,21 +1209,21 @@
           </div>
 
           <!-- 已實現損益（合併卡：含股息 + 交易明細） -->
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.15s">
+          <div class="col-6 col-xl kpi-card glass kpi-delay-15">
             <div class="kpi-stripe kpi-stripe-lime"></div>
             <div class="kpi-icon">✅</div>
             <div class="label" title="已實現交易淨利 + 已領股息；不含未實現浮動損益。">已實現損益</div>
             <div class="value" :class="performanceTotals.realized_with_dividends >= 0 ? 'kpi-positive' : 'kpi-negative'">
               {{ fmt(performanceTotals.realized_with_dividends) }}
             </div>
-            <div class="kpi-note" style="margin-top:0.4rem; display:flex; flex-direction:column; gap:2px;">
-              <span>交易 <span :class="performanceTotals.realized_profit >= 0 ? 'kpi-positive' : 'kpi-negative'" style="font-size:0.82rem">{{ fmt(performanceTotals.realized_profit) }}</span></span>
-              <span>股息 <span style="color:var(--accent-a);font-size:0.82rem">{{ fmt(performanceTotals.dividends_received) }}</span></span>
+            <div class="kpi-note kpi-note-stack">
+              <span>交易 <span :class="[performanceTotals.realized_profit >= 0 ? 'kpi-positive' : 'kpi-negative', 'kpi-inline-sm']">{{ fmt(performanceTotals.realized_profit) }}</span></span>
+              <span>股息 <span class="kpi-inline-sm kpi-inline-accent">{{ fmt(performanceTotals.dividends_received) }}</span></span>
             </div>
           </div>
 
           <!-- 預估股息（本年度） -->
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.20s">
+          <div class="col-6 col-xl kpi-card glass kpi-delay-20">
             <div class="kpi-stripe kpi-stripe-amber"></div>
             <div class="kpi-icon">💰</div>
             <div class="label">預估股息（本年度）</div>
@@ -954,14 +1234,14 @@
           </div>
 
           <!-- 應繳利息 + 維持率 sub-line -->
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.25s">
+          <div class="col-6 col-xl kpi-card glass kpi-delay-25">
             <div class="kpi-stripe kpi-stripe-red"></div>
             <div class="kpi-icon">🔔</div>
             <div class="label">應繳利息</div>
             <div class="value danger-text">{{ fmt(loans.total_accrued_interest) }}</div>
-            <div class="kpi-note" style="margin-top:0.4rem; display:flex; flex-direction:column; gap:2px;">
+            <div class="kpi-note kpi-note-stack">
               <span>所有借款累計應付利息</span>
-              <span>維持率 <span :class="maintainClass" style="font-size:0.82rem">{{ maintenanceLabel }}</span></span>
+              <span>維持率 <span :class="[maintainClass, 'kpi-inline-sm']">{{ maintenanceLabel }}</span></span>
             </div>
           </div>
 
@@ -993,7 +1273,7 @@
                   <span class="badge rounded-pill badge-soft">{{ filteredPerformanceItems.length }} 檔</span>
                 </div>
                 <div class="table-actions">
-                  <label class="form-check-label small d-flex align-items-center gap-1" style="color: var(--text-dim); cursor: pointer">
+                  <label class="form-check-label small d-flex align-items-center gap-1 form-check-dim-clickable">
                     <input class="form-check-input" type="checkbox" v-model="overviewFilter.only_active_holdings" />
                     只看目前有庫存
                   </label>
@@ -1065,7 +1345,7 @@
                   <button class="btn btn-sm btn-outline-info" @click="refreshTransactionPrices('all')" title="更新所有交易代號的市價">↺ 全部代號</button>
                 </div>
               </div>
-              <div class="small mb-3" style="color: var(--text-dim); font-size: 0.76rem">
+              <div class="small mb-3 text-dim-76">
                 市價更新只影響未實現損益與報酬率的計算，不會修改交易紀錄。
               </div>
 
@@ -1127,15 +1407,33 @@
                       <td>{{ tx.date }}</td>
                       <td>
                         <div>{{ tx.stock_id }}</div>
-                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ tx.chinese_name }}</div>
+                        <div class="text-dim-78">{{ tx.chinese_name }}</div>
                       </td>
                       <td>
                         <span :class="['status-badge', tx.action]">{{ tx.action_label || actionLabel(tx.action) }}</span>
                       </td>
                       <td>{{ tx.shares.toLocaleString() }}</td>
                       <td>{{ fmtPrice(tx.price) }}</td>
-                      <td class="hide-mobile">{{ fmt(tx.fees) }}</td>
-                      <td class="hide-mobile">{{ fmt(tx.transaction_tax) }}</td>
+                      <td class="hide-mobile">
+                        <div>{{ fmt(tx.fees) }}</div>
+                        <div
+                          class="tx-fee-badge"
+                          :class="txFeeModeMeta(tx).className"
+                          :title="txFeeModeMeta(tx).title"
+                        >
+                          {{ txFeeModeMeta(tx).label }}
+                        </div>
+                      </td>
+                      <td class="hide-mobile">
+                        <div>{{ fmt(tx.transaction_tax) }}</div>
+                        <div
+                          class="tx-fee-badge"
+                          :class="txTaxModeMeta(tx).className"
+                          :title="txTaxModeMeta(tx).title"
+                        >
+                          {{ txTaxModeMeta(tx).label }}
+                        </div>
+                      </td>
                       <td :class="tx.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
                         {{ fmt(tx.realized_profit) }}
                       </td>
@@ -1162,7 +1460,7 @@
                     <span class="badge rounded-pill badge-soft">{{ filteredTransactionTimelineRows.length }} 筆</span>
                   </div>
                 </div>
-                <div class="mb-2" style="color: var(--text-dim)">
+                <div class="mb-2 text-dim-small">
                   <label class="form-check-label small">
                     <input class="form-check-input me-1" type="checkbox" v-model="txTimelineFilter.only_cash_with_holdings" />
                     只顯示有持股的配息事件
@@ -1174,7 +1472,7 @@
                   <span class="badge rounded-pill badge-soft">股務事件 {{ timelineStats.stockActionCount }} 筆</span>
                   <span class="badge rounded-pill badge-soft">淨股數變動 {{ timelineStats.netShareDelta.toLocaleString() }}</span>
                 </div>
-                <div class="table-scroll" style="max-height: 220px">
+                <div class="table-scroll table-scroll-220">
                   <table class="table table-hover align-middle">
                     <thead>
                       <tr>
@@ -1196,7 +1494,7 @@
                         <td>{{ row.date }}</td>
                         <td>
                           <div>{{ row.stock_id }}</div>
-                          <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                          <div class="text-dim-78">{{ row.chinese_name }}</div>
                         </td>
                         <td>
                           <span class="source-badge" :class="row.typeClass">{{ row.typeLabel }}</span>
@@ -1212,7 +1510,7 @@
                         </td>
                       </tr>
                       <tr v-if="!filteredTransactionTimelineRows.length">
-                        <td colspan="7" class="text-center" style="color: var(--text-dim)">目前沒有股務或配息事件</td>
+                        <td colspan="7" class="text-center text-dim-small">目前沒有股務或配息事件</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1267,7 +1565,7 @@
                   </button>
                 </div>
 
-                <hr style="border-color: var(--line)" />
+                <hr class="panel-divider" />
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                   <div>
@@ -1293,33 +1591,48 @@
                   </button>
                 </div>
 
-                <hr style="border-color: var(--line)" />
+                <hr class="panel-divider" />
 
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                  <div>
-                    <div class="fw-semibold">資料修復工具</div>
-                    <div style="font-size: 0.82rem; color: var(--text-dim)">
-                      當 stock_info 被誤刪除時，可一鍵補回交易與股利中出現的證券代號。
+                <div class="system-tool-block">
+                  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                      <div class="fw-semibold">資料修復工具</div>
+                      <div class="text-dim-xs">
+                        當 stock_info 被誤刪除時，可一鍵補回交易與股利中出現的證券代號。
+                      </div>
                     </div>
+                    <span class="system-tool-status" :class="{ busy: systemToolBusy }">
+                      <span class="status-dot" :class="{ busy: systemToolBusy }"></span>
+                      {{ systemToolBusy ? `執行中：${systemToolBusyLabel}` : '待命中' }}
+                    </span>
                   </div>
-                  <button class="btn btn-outline-warning" @click="repairStockInfo" :disabled="repairStockInfoLoading">
-                    {{ repairStockInfoLoading ? '修復中...' : '一鍵修復 stock_info' }}
-                  </button>
-                  <button class="btn btn-outline-secondary" @click="openMissingPriceModal" :disabled="missingPriceLoading">
-                    {{ missingPriceLoading ? '讀取中...' : '僅顯示無市價清單' }}
-                  </button>
-                  <button class="btn btn-outline-danger" @click="refreshMissingPriceList" :disabled="missingPriceRefreshLoading">
-                    {{ missingPriceRefreshLoading ? '重抓中...' : '手動重抓缺價' }}
-                  </button>
-                  <button class="btn btn-outline-info" @click="showSyncDetailModal = true">
-                    同步來源明細
-                  </button>
+
+                  <div class="system-tool-actions mt-2">
+                    <button class="btn btn-outline-info" @click="reconcileDividendEvents" :disabled="systemToolBusy">
+                      {{ dividendReconcileLoading ? '對帳中...' : '一鍵股務重對帳' }}
+                    </button>
+                    <button class="btn btn-outline-warning" @click="repairStockInfo" :disabled="systemToolBusy">
+                      {{ repairStockInfoLoading ? '修復中...' : '一鍵修復 stock_info' }}
+                    </button>
+                    <button class="btn btn-outline-secondary" @click="openMissingPriceModal" :disabled="systemToolBusy">
+                      {{ missingPriceLoading ? '讀取中...' : '僅顯示無市價清單' }}
+                    </button>
+                    <button class="btn btn-outline-danger" @click="refreshMissingPriceList" :disabled="systemToolBusy">
+                      {{ missingPriceRefreshLoading ? '重抓中...' : '手動重抓缺價' }}
+                    </button>
+                    <button class="btn btn-outline-info" @click="showSyncDetailModal = true" :disabled="systemToolBusy">
+                      同步來源明細
+                    </button>
+                  </div>
                 </div>
-                <div v-if="repairStockInfoMessage" class="mt-2 small" style="color: var(--text-dim)">
+                <div v-if="repairStockInfoMessage" class="mt-2 small system-tool-message" aria-live="polite">
                   {{ repairStockInfoMessage }}
                 </div>
+                <div v-if="dividendReconcileMessage" class="mt-1 small system-tool-message" aria-live="polite">
+                  {{ dividendReconcileMessage }}
+                </div>
 
-                <hr style="border-color: var(--line)" />
+                <hr class="panel-divider" />
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                   <div>
@@ -1344,7 +1657,7 @@
                       問題數 {{ healthCheckReport.issue_count }}
                     </span>
                   </div>
-                  <div class="small" style="color: var(--text-dim)">
+                  <div class="small text-dim-small">
                     缺價 {{ (healthCheckReport.issues?.missing_prices || []).length }}，
                     超賣 {{ (healthCheckReport.issues?.oversell_transactions || []).length }}，
                     孤兒庫存 {{ (healthCheckReport.issues?.orphan_holdings || []).length }}，
@@ -1352,7 +1665,7 @@
                   </div>
                 </div>
 
-                <hr style="border-color: var(--line)" />
+                <hr class="panel-divider" />
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                   <div>
@@ -1361,17 +1674,17 @@
                   </div>
                   <div class="d-flex flex-wrap gap-2 align-items-end">
                     <div>
-                      <label class="form-label mb-1" style="font-size: 0.78rem">回溯年數</label>
-                      <input v-model.number="dividendRecalcYears" type="number" min="1" max="30" step="1" class="form-control form-control-sm" style="width: 100px" />
+                      <label class="form-label mb-1 compact-input-label">回溯年數</label>
+                      <input v-model.number="dividendRecalcYears" type="number" min="1" max="30" step="1" class="form-control form-control-sm input-w-100" />
                     </div>
                     <div>
-                      <label class="form-label mb-1" style="font-size: 0.78rem">差異起算年</label>
-                      <input v-model.number="dividendRecalcStartYear" type="number" min="1900" max="2100" step="1" class="form-control form-control-sm" style="width: 110px" />
+                      <label class="form-label mb-1 compact-input-label">差異起算年</label>
+                      <input v-model.number="dividendRecalcStartYear" type="number" min="1900" max="2100" step="1" class="form-control form-control-sm input-w-110" />
                     </div>
-                    <button class="btn btn-outline-info" @click="startDividendRecalcJob" :disabled="dividendRecalc.status === 'queued' || dividendRecalc.status === 'running'">
-                      {{ (dividendRecalc.status === 'queued' || dividendRecalc.status === 'running') ? '重算進行中...' : '啟動全股票重算' }}
+                    <button class="btn btn-outline-info" @click="startDividendRecalcJob" :disabled="recalcJobRunning">
+                      {{ recalcJobRunning ? '重算進行中...' : '啟動全股票重算' }}
                     </button>
-                    <button class="btn btn-outline-danger" @click="cancelDividendRecalcJob" :disabled="!(dividendRecalc.status === 'queued' || dividendRecalc.status === 'running')">
+                    <button class="btn btn-outline-danger" @click="cancelDividendRecalcJob" :disabled="!recalcJobRunning">
                       中斷重算工作
                     </button>
                   </div>
@@ -1387,11 +1700,11 @@
                     <span v-if="dividendRecalc.current_stock_id" class="badge rounded-pill badge-soft">目前 {{ dividendRecalc.current_stock_id }}</span>
                   </div>
 
-                  <div class="progress" style="height: 10px; background: rgba(255,255,255,0.08)">
+                  <div class="progress progress-thin">
                     <div class="progress-bar bg-info" role="progressbar" :style="{ width: `${Math.max(0, Math.min(100, Number(dividendRecalc.progress_pct || 0)))}%` }"></div>
                   </div>
 
-                  <div class="small mt-2" style="color: var(--text-dim)">
+                  <div class="small mt-2 text-dim-small">
                     已處理 {{ dividendRecalc.processed_stocks || 0 }} / {{ dividendRecalc.total_stocks || 0 }} 檔
                     <span v-if="dividendRecalc.finished_at">，完成於 {{ dividendRecalc.finished_at }}</span>
                   </div>
@@ -1403,11 +1716,11 @@
                     </button>
                   </div>
 
-                  <div class="small" style="color: var(--text-dim)">
+                  <div class="small text-dim-small">
                     差異檔數 {{ dividendRecalc.diff_report?.changed_count || 0 }}，顯示前 {{ (dividendRecalc.diff_report?.top_changes || []).length }} 檔
                   </div>
 
-                  <div v-if="showDividendDiffReport" class="table-scroll mt-2" style="max-height: 280px">
+                  <div v-if="showDividendDiffReport" class="table-scroll table-scroll-280 mt-2">
                     <table class="table table-sm table-hover align-middle">
                       <thead>
                         <tr>
@@ -1427,7 +1740,7 @@
                           <td :class="row.delta_cash_dividend >= 0 ? 'status-safe' : 'status-danger'">{{ fmt(row.delta_cash_dividend) }}</td>
                         </tr>
                         <tr v-if="!(dividendRecalc.diff_report?.top_changes || []).length">
-                          <td colspan="5" class="text-center" style="color: var(--text-dim)">目前沒有差異資料</td>
+                          <td colspan="5" class="text-center text-dim-small">目前沒有差異資料</td>
                         </tr>
                       </tbody>
                     </table>
@@ -1435,7 +1748,7 @@
 
                   <div v-if="(dividendRecalc.failed_stocks || []).length" class="mt-3">
                     <div class="fw-semibold mb-1">失敗清單（{{ (dividendRecalc.failed_stocks || []).length }}）</div>
-                    <div class="table-scroll" style="max-height: 180px">
+                    <div class="table-scroll table-scroll-180">
                       <table class="table table-sm table-hover align-middle">
                         <thead>
                           <tr>
@@ -1454,7 +1767,7 @@
                   </div>
                 </div>
 
-                <hr style="border-color: var(--line)" />
+                <hr class="panel-divider" />
 
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
                   <div>
@@ -1470,7 +1783,7 @@
                     </button>
                   </div>
                 </div>
-                <div v-if="backupInfo" class="small" style="color: var(--text-dim)">
+                <div v-if="backupInfo" class="small text-dim-small">
                   最新備份：{{ backupInfo.backup_file }}（{{ backupInfo.created_at }}）
                   <span v-if="backupInfo.offsite && backupInfo.offsite.uploaded">，已上傳 Google Drive</span>
                 </div>
@@ -1497,7 +1810,7 @@
                 </div>
               </div>
 
-              <div class="small mb-2" style="color: var(--text-dim)">
+              <div class="small mb-2 text-dim-small">
                 僅顯示目前有庫存標的，且預設只顯示今年資料；若需看過去年份，請調整開始/結束日期。
               </div>
 
@@ -1530,7 +1843,7 @@
                 <span class="badge rounded-pill badge-soft">篩選金額總計 {{ fmt(dividendSummary.totalCash) }}</span>
                 <span class="badge rounded-pill badge-soft">篩選股數總計 {{ dividendSummary.totalShares.toLocaleString() }}</span>
               </div>
-              <div style="font-size: 0.8rem; color: var(--text-dim); margin-bottom: 0.75rem">
+              <div class="text-dim-80 mb-legend">
                 來源若未提供發放日，系統會暫以除息日代替，並標示為暫代資料。
               </div>
 
@@ -1555,12 +1868,12 @@
                     <tr v-for="row in filteredDividends" :key="row.id">
                       <td>
                         <div>{{ row.stock_id }}</div>
-                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                        <div class="text-dim-78">{{ row.chinese_name }}</div>
                       </td>
                       <td>{{ row.ex_date }}</td>
                       <td>
                         <div>{{ row.pay_date }}</div>
-                        <div v-if="isDividendPayDateFallback(row)" style="font-size: 0.75rem; color: var(--text-dim)">來源未提供，暫用除息日</div>
+                        <div v-if="isDividendPayDateFallback(row)" class="text-dim-75">來源未提供，暫用除息日</div>
                       </td>
                       <td>{{ fmtPrice3(row.amount_per_share) }}</td>
                       <td>{{ row.holding_shares.toLocaleString() }}</td>
@@ -1617,12 +1930,12 @@
                     <tr v-for="row in filteredStockDividends" :key="`stock-div-${row.id}`">
                       <td>
                         <div>{{ row.stock_id }}</div>
-                        <div style="font-size: 0.78rem; color: var(--text-dim)">{{ row.chinese_name }}</div>
+                        <div class="text-dim-78">{{ row.chinese_name }}</div>
                       </td>
                       <td>{{ row.ex_date }}</td>
                       <td>
                         <div>{{ row.allot_date }}</div>
-                        <div v-if="isStockDividendDateFallback(row)" style="font-size: 0.75rem; color: var(--text-dim)">來源未提供，暫用除權日</div>
+                        <div v-if="isStockDividendDateFallback(row)" class="text-dim-75">來源未提供，暫用除權日</div>
                       </td>
                       <td>{{ row.ratio }}</td>
                       <td>{{ row.holding_shares.toLocaleString() }}</td>
@@ -1675,11 +1988,11 @@
                 </div>
               </div>
 
-              <div class="summary-strip" style="margin-bottom: 0.6rem">
-                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:#ff4d4f;border-radius:2px;margin-right:3px"></span><span class="sp-label">逾期</span></div>
-                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,107,107,0.6);border-radius:2px;margin-right:3px"></span><span class="sp-label">30天內到期</span></div>
-                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,160,0,0.7);border-radius:2px;margin-right:3px"></span><span class="sp-label">60天內到期</span></div>
-                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,214,0,0.8);border-radius:2px;margin-right:3px"></span><span class="sp-label">90天內到期</span></div>
+              <div class="summary-strip summary-strip-loan">
+                <div class="sum-pill"><span class="loan-legend-dot overdue"></span><span class="sp-label">逾期</span></div>
+                <div class="sum-pill"><span class="loan-legend-dot d30"></span><span class="sp-label">30天內到期</span></div>
+                <div class="sum-pill"><span class="loan-legend-dot d60"></span><span class="sp-label">60天內到期</span></div>
+                <div class="sum-pill"><span class="loan-legend-dot d90"></span><span class="sp-label">90天內到期</span></div>
               </div>
 
               <div class="table-scroll">
@@ -1704,49 +2017,48 @@
                       <td>{{ loan.lender }}</td>
                       <td>
                         <div>{{ loan.collateral }}</div>
-                        <div v-if="loan.collateral_name" style="color:var(--text-dim);font-size:0.8em;margin-top:1px">{{ loan.collateral_name }}</div>
+                        <div v-if="loan.collateral_name" class="text-dim-80 mt-1">{{ loan.collateral_name }}</div>
                       </td>
                       <td>{{ loan.collateral_lots > 0 ? loan.collateral_lots : '—' }}</td>
                       <td>
                         <span v-if="loan.principal > 0">{{ fmt(loan.principal) }}</span>
-                        <span v-else class="badge" style="background:rgba(0,208,255,0.15);color:var(--accent-a);font-size:0.78rem;padding:2px 6px;border-radius:4px">純擔保</span>
+                        <span v-else class="badge badge-collateral-only">純擔保</span>
                       </td>
                       <td class="hide-mobile">{{ loan.principal > 0 ? (loan.interest_rate * 100).toFixed(2) + '%' : '—' }}</td>
                       <td class="hide-mobile">{{ loan.start_date }}</td>
                       <td>
                         <div v-if="loan.due_date">{{ lastRepayDate(loan.due_date) }}</div>
-                        <div v-if="loan.due_date && loan.days_to_due !== null && loan.days_to_due !== undefined" style="font-size:0.8em;margin-top:1px">
-                          <span v-if="loan.days_to_due - 1 < 0" style="color:var(--danger);font-weight:600">已逾期 {{ Math.abs(loan.days_to_due - 1) }} 天</span>
-                          <span v-else style="color:var(--text-dim)">剩 {{ loan.days_to_due - 1 }} 天</span>
+                        <div v-if="loan.due_date && loan.days_to_due !== null && loan.days_to_due !== undefined" class="text-dim-80 mt-1">
+                          <span v-if="loan.days_to_due - 1 < 0" class="status-danger text-strong">已逾期 {{ Math.abs(loan.days_to_due - 1) }} 天</span>
+                          <span v-else class="text-dim-small">剩 {{ loan.days_to_due - 1 }} 天</span>
                         </div>
-                        <span v-if="!loan.due_date" style="color:var(--text-dim)">—</span>
+                        <span v-if="!loan.due_date" class="text-dim-small">—</span>
                       </td>
                       <td class="hide-mobile">{{ fmt(loan.accrued_interest) }}</td>
                       <td>
-                        <span v-if="loan.maintenance_rate !== null && loan.maintenance_rate !== undefined"
-                          :style="{ color: loan.maintenance_rate < 140 ? 'var(--danger)' : loan.maintenance_rate < 167 ? 'var(--warn)' : 'var(--ok)', fontWeight: loan.maintenance_rate < 167 ? '600' : '400' }">
+                        <span v-if="loan.maintenance_rate !== null && loan.maintenance_rate !== undefined" :class="loanMaintenanceClass(loan.maintenance_rate)">
                           {{ loan.maintenance_rate.toFixed(1) }}%
                         </span>
-                        <span v-else style="color:var(--text-dim)">—</span>
+                        <span v-else class="text-dim-small">—</span>
                       </td>
-                      <td :style="{ color: loan.net_proceeds >= 0 ? 'var(--ok)' : 'var(--danger)', fontWeight: '600' }">
+                      <td :class="loanNetProceedsClass(loan.net_proceeds)">
                         {{ loan.net_proceeds !== null ? fmt(loan.net_proceeds) : '—' }}
                       </td>
                       <td>
-                        <button class="btn btn-sm btn-outline-light me-1" style="padding:2px 8px;font-size:0.75rem" @click="openEditLoan(loan)">編輯</button>
-                        <button class="btn btn-sm btn-outline-danger" style="padding:2px 8px;font-size:0.75rem" @click="deleteLoan(loan)">刪除</button>
+                        <button class="btn btn-sm btn-outline-light me-1 btn-compact-xs" @click="openEditLoan(loan)">編輯</button>
+                        <button class="btn btn-sm btn-outline-danger btn-compact-xs" @click="deleteLoan(loan)">刪除</button>
                       </td>
                     </tr>
                   </tbody>
                   <tfoot>
-                    <tr style="font-weight:600;border-top:1px solid var(--line)">
-                      <td colspan="2" style="color:var(--text-dim)">合計 {{ filteredLoans.length }} 筆</td>
+                    <tr class="loan-total-row">
+                      <td colspan="2" class="text-dim-small">合計 {{ filteredLoans.length }} 筆</td>
                       <td></td>
                       <td>{{ fmt(loanTotals.principal) }}</td>
                       <td class="hide-mobile"></td><td class="hide-mobile"></td><td></td>
                       <td class="hide-mobile">{{ fmt(loanTotals.accrued_interest) }}</td>
                       <td></td>
-                      <td :style="{ color: loanTotals.net_proceeds >= 0 ? 'var(--ok)' : 'var(--danger)' }">{{ fmt(loanTotals.net_proceeds) }}</td>
+                      <td :class="loanTotals.net_proceeds >= 0 ? 'status-safe' : 'status-danger'">{{ fmt(loanTotals.net_proceeds) }}</td>
                       <td></td>
                     </tr>
                   </tfoot>
@@ -1758,10 +2070,10 @@
       </div>
 
       <!-- 新增/編輯借款 Modal -->
-      <div v-if="showLoanModal" class="modal d-block" style="background: rgba(0,0,0,0.7)">
+      <div v-if="showLoanModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius:16px">
-            <div class="modal-header border-bottom" style="border-color:var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">{{ loanModalMode === 'add' ? '新增借款' : '編輯借款' }}</h5>
               <button type="button" class="btn-close btn-close-white" @click="showLoanModal = false"></button>
             </div>
@@ -1773,9 +2085,9 @@
                 </div>
                 <div class="col-4">
                   <label class="form-label">擔保品（股票代號）</label>
-                  <input v-model.trim="loanForm.collateral" class="form-control" placeholder="2330" @input="onCollateralInput" style="text-transform:uppercase" />
-                  <div v-if="loanCollateralName" style="font-size:0.8rem;color:var(--ok);margin-top:3px">{{ loanCollateralName }}</div>
-                  <div v-else-if="loanForm.collateral" style="font-size:0.8rem;color:var(--text-dim);margin-top:3px">查詢中…</div>
+                  <input v-model.trim="loanForm.collateral" class="form-control text-uppercase" placeholder="2330" @input="onCollateralInput" />
+                  <div v-if="loanCollateralName" class="text-dim-80 status-safe mt-1">{{ loanCollateralName }}</div>
+                  <div v-else-if="loanForm.collateral" class="text-dim-80 mt-1">查詢中…</div>
                 </div>
                 <div class="col-2">
                   <label class="form-label">抵押張數</label>
@@ -1799,7 +2111,7 @@
                 </div>
               </div>
             </div>
-            <div class="modal-footer border-top" style="border-color:var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="showLoanModal = false">取消</button>
               <button class="btn btn-neon" @click="saveLoan" :disabled="loanSaving">
                 {{ loanSaving ? '儲存中...' : '儲存' }}
@@ -1810,22 +2122,22 @@
       </div>
 
       <!-- 刪除借款確認 Modal -->
-      <div v-if="showDeleteLoanConfirm" class="modal d-block" style="background:rgba(0,0,0,0.7)">
-        <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
-          <div class="modal-content glass" style="border-radius:16px">
-            <div class="modal-header border-bottom" style="border-color:var(--line) !important">
-              <h5 class="modal-title" style="color:var(--danger)">確認刪除</h5>
+      <div v-if="showDeleteLoanConfirm" class="modal d-block modal-mask">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-compact">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
+              <h5 class="modal-title status-danger">確認刪除</h5>
               <button type="button" class="btn-close btn-close-white" @click="showDeleteLoanConfirm=false;deleteLoanTarget=null"></button>
             </div>
             <div class="modal-body" v-if="deleteLoanTarget">
               <p>確定要刪除以下借款記錄？此操作無法復原。</p>
-              <div class="glass-light p-2" style="font-size:0.9rem">
+              <div class="glass-light p-2">
                 <div>機構：{{ deleteLoanTarget.lender }}</div>
                 <div>擔保品：{{ deleteLoanTarget.collateral }} {{ deleteLoanTarget.collateral_name }}</div>
                 <div>本金：{{ fmt(deleteLoanTarget.principal) }}</div>
               </div>
             </div>
-            <div class="modal-footer border-top" style="border-color:var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="showDeleteLoanConfirm=false;deleteLoanTarget=null">取消</button>
               <button class="btn btn-danger" @click="confirmDeleteLoan">確認刪除</button>
             </div>
@@ -1834,10 +2146,10 @@
       </div>
 
       <!-- 單檔股票詳情Modal -->
-      <div v-if="showStockModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showStockModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-lg modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">{{ selectedStock.stock_id }} {{ selectedStock.chinese_name }} 詳細資訊</h5>
               <button type="button" class="btn-close btn-close-white" @click="showStockModal = false"></button>
             </div>
@@ -1845,66 +2157,66 @@
               <div class="row g-2 mb-3">
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">資產類型</div>
-                    <div style="font-weight: 600">{{ selectedStock.asset_type }}</div>
+                    <div class="text-dim-80">資產類型</div>
+                    <div class="text-strong">{{ selectedStock.asset_type }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">產業</div>
-                    <div style="font-weight: 600">{{ selectedStock.sector }}</div>
+                    <div class="text-dim-80">產業</div>
+                    <div class="text-strong">{{ selectedStock.sector }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">庫存股數</div>
-                    <div style="font-weight: 600">{{ selectedStock.shares.toLocaleString() }}</div>
+                    <div class="text-dim-80">庫存股數</div>
+                    <div class="text-strong">{{ selectedStock.shares.toLocaleString() }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">市價</div>
-                    <div style="font-weight: 600">{{ fmtPrice(selectedStock.current_price) }}</div>
+                    <div class="text-dim-80">市價</div>
+                    <div class="text-strong">{{ fmtPrice(selectedStock.current_price) }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">每股成本</div>
-                    <div style="font-weight: 600">{{ fmtPrice(selectedStock.avg_cost_per_share) }}</div>
+                    <div class="text-dim-80">每股成本</div>
+                    <div class="text-strong">{{ fmtPrice(selectedStock.avg_cost_per_share) }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">市值</div>
-                    <div style="font-weight: 600">{{ fmt(selectedStock.market_value) }}</div>
+                    <div class="text-dim-80">市值</div>
+                    <div class="text-strong">{{ fmt(selectedStock.market_value) }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">未實現損益</div>
-                    <div :class="selectedStock.unrealized_profit >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                    <div class="text-dim-80">未實現損益</div>
+                    <div :class="[selectedStock.unrealized_profit >= 0 ? 'status-safe' : 'status-danger', 'text-strong']">
                       {{ fmt(selectedStock.unrealized_profit) }}
                     </div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">已實現損益</div>
-                    <div :class="selectedStock.realized_profit >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                    <div class="text-dim-80">已實現損益</div>
+                    <div :class="[selectedStock.realized_profit >= 0 ? 'status-safe' : 'status-danger', 'text-strong']">
                       {{ fmt(selectedStock.realized_profit) }}
                     </div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">已領股息</div>
-                    <div style="font-weight: 600">{{ fmt(selectedStock.dividends_received) }}</div>
+                    <div class="text-dim-80">已領股息</div>
+                    <div class="text-strong">{{ fmt(selectedStock.dividends_received) }}</div>
                   </div>
                 </div>
                 <div class="col-6">
                   <div class="glass-light p-2">
-                    <div style="font-size: 0.8rem; color: var(--text-dim)">已實現損益 (含股息)</div>
-                    <div :class="selectedStock.realized_with_dividends >= 0 ? 'status-safe' : 'status-danger'" style="font-weight: 600">
+                    <div class="text-dim-80">已實現損益 (含股息)</div>
+                    <div :class="[selectedStock.realized_with_dividends >= 0 ? 'status-safe' : 'status-danger', 'text-strong']">
                       {{ fmt(selectedStock.realized_with_dividends) }}
                     </div>
                   </div>
@@ -1912,7 +2224,7 @@
               </div>
 
               <h6 class="mb-2">交易紀錄</h6>
-              <div class="table-scroll" style="max-height: 300px">
+              <div class="table-scroll table-scroll-300">
                 <table class="table table-sm table-hover">
                   <thead>
                     <tr>
@@ -1940,10 +2252,10 @@
                         {{ fmt(tx.realized_profit) }}
                       </td>
                       <td>
-                        <button class="btn btn-xs btn-outline-light me-1" style="padding: 0.2rem 0.4rem; font-size: 0.75rem" @click="editTransaction(tx)">
+                        <button class="btn btn-xs btn-outline-light me-1 btn-icon-xs" @click="editTransaction(tx)">
                           編
                         </button>
-                        <button class="btn btn-xs btn-outline-danger" style="padding: 0.2rem 0.4rem; font-size: 0.75rem" @click="deleteTransaction(tx.id)">
+                        <button class="btn btn-xs btn-outline-danger btn-icon-xs" @click="deleteTransaction(tx.id)">
                           刪
                         </button>
                       </td>
@@ -1953,7 +2265,7 @@
               </div>
 
               <h6 class="mb-2 mt-3">持有期間每年實際股利/股息</h6>
-              <div class="table-scroll" style="max-height: 220px">
+              <div class="table-scroll table-scroll-220">
                 <table class="table table-sm table-hover align-middle">
                   <thead>
                     <tr>
@@ -1973,7 +2285,7 @@
                       <td>{{ row.stock_event_count }}</td>
                     </tr>
                     <tr v-if="!(selectedStock.yearly_dividends || []).length">
-                      <td colspan="5" class="text-center" style="color: var(--text-dim)">目前無年度股利資料</td>
+                      <td colspan="5" class="text-center text-dim-small">目前無年度股利資料</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1984,10 +2296,10 @@
       </div>
 
       <!-- 新增/編輯交易Modal -->
-      <div v-if="showAddTxModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showAddTxModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">{{ editingTxId ? '編輯' : '新增' }}交易</h5>
               <button type="button" class="btn-close btn-close-white" @click="closeAddTxModal"></button>
             </div>
@@ -2005,10 +2317,10 @@
                     placeholder="手動輸入證券代號，例如 2330 或 00403A"
                     @blur="onStockChange"
                   />
-                  <div v-if="txForm.stock_id" style="font-size: 0.8rem; color: var(--text-dim); margin-top: 0.3rem">
+                  <div v-if="txForm.stock_id" class="text-dim-80 mt-1">
                     {{ selectedStockName || txForm.stock_id }}
                   </div>
-                  <div v-if="stockQuoteLoading" style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.15rem">
+                  <div v-if="stockQuoteLoading" class="text-dim-78 mt-tight-sm">
                     讀取最新收盤價中...
                   </div>
                 </div>
@@ -2043,7 +2355,7 @@
                 <div class="col-md-4">
                   <label class="form-label">數量</label>
                   <input v-model.number="txForm.trade_qty" type="number" min="0" step="1" class="form-control" />
-                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">
+                  <div class="text-dim-78 mt-tight">
                     換算股數：{{ Number(txForm.shares || 0).toLocaleString() }} 股
                   </div>
                 </div>
@@ -2054,11 +2366,11 @@
                 <div class="col-12">
                   <label class="form-label" title="手續費：一般交易 0.1425%（6 折最低 20 元），定期定額固定 1 元。&#10;交易稅：賣出時自動計算 — 股票 0.3%、ETF 0.1%、債券 0.1%；買進為 0。">手續費 &amp; 交易稅 ℹ</label>
                   <div class="d-flex gap-2 mb-2">
-                    <select v-model="txForm.fee_mode" class="form-select" style="max-width: 230px">
+                    <select v-model="txForm.fee_mode" class="form-select input-max-230">
                       <option value="auto">系統計算</option>
                       <option value="manual">手動輸入</option>
                     </select>
-                    <select v-model="txForm.is_dca" class="form-select" style="max-width: 230px" :disabled="txForm.fee_mode !== 'auto'">
+                    <select v-model="txForm.is_dca" class="form-select input-max-230" :disabled="txForm.fee_mode !== 'auto'">
                       <option :value="false">一般交易</option>
                       <option :value="true">定期定額</option>
                     </select>
@@ -2071,14 +2383,14 @@
                     class="form-control"
                     :readonly="txForm.fee_mode === 'auto'"
                   />
-                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">
+                  <div class="text-dim-78 mt-tight">
                     系統規則：一般交易 6 折且最低 20 元；定期定額固定 1 元。手動模式可自行輸入 0。
                   </div>
                 </div>
               </div>
               <div v-if="txError" class="text-danger mt-2 small">{{ txError }}</div>
             </div>
-            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="closeAddTxModal">取消</button>
               <button class="btn btn-neon" @click="submitTransaction">{{ editingTxId ? '更新' : '新增' }}</button>
             </div>
@@ -2087,10 +2399,10 @@
       </div>
 
       <!-- 新增現金股利 Modal -->
-      <div v-if="showAddDividendModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showAddDividendModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">新增現金股利</h5>
               <button type="button" class="btn-close btn-close-white" @click="closeAddDividendModal"></button>
             </div>
@@ -2107,7 +2419,7 @@
                 <div class="col-6">
                   <label class="form-label">發放日</label>
                   <input v-model="dividendForm.pay_date" type="date" class="form-control" />
-                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">若來源未提供，可留空，系統會暫用除息日。</div>
+                  <div class="text-dim-78 mt-tight">若來源未提供，可留空，系統會暫用除息日。</div>
                 </div>
                 <div class="col-6">
                   <label class="form-label">每股配息</label>
@@ -2128,7 +2440,7 @@
               </div>
               <div v-if="dividendError" class="text-danger mt-2 small">{{ dividendError }}</div>
             </div>
-            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="closeAddDividendModal">取消</button>
               <button class="btn btn-neon" @click="submitDividend">新增</button>
             </div>
@@ -2137,10 +2449,10 @@
       </div>
 
       <!-- 新增股票股利 Modal -->
-      <div v-if="showAddStockDividendModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showAddStockDividendModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">新增股票股利</h5>
               <button type="button" class="btn-close btn-close-white" @click="closeAddStockDividendModal"></button>
             </div>
@@ -2157,7 +2469,7 @@
                 <div class="col-6">
                   <label class="form-label">入帳日</label>
                   <input v-model="stockDividendForm.allot_date" type="date" class="form-control" />
-                  <div style="font-size: 0.78rem; color: var(--text-dim); margin-top: 0.2rem">若來源未提供，可留空，系統會暫用除權日。</div>
+                  <div class="text-dim-78 mt-tight">若來源未提供，可留空，系統會暫用除權日。</div>
                 </div>
                 <div class="col-6">
                   <label class="form-label">配股比率（每 1 股）</label>
@@ -2182,7 +2494,7 @@
               </div>
               <div v-if="stockDividendError" class="text-danger mt-2 small">{{ stockDividendError }}</div>
             </div>
-            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="closeAddStockDividendModal">取消</button>
               <button class="btn btn-neon" @click="submitStockDividend">新增</button>
             </div>
@@ -2191,10 +2503,10 @@
       </div>
 
       <!-- 同步來源明細 Modal -->
-      <div v-if="showSyncDetailModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showSyncDetailModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-xl modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">同步來源明細</h5>
               <button type="button" class="btn-close btn-close-white" @click="showSyncDetailModal = false"></button>
             </div>
@@ -2205,7 +2517,7 @@
                 <span class="badge rounded-pill badge-soft">新增現金股利 {{ dividendSyncSummary.inserted_cash_dividends || 0 }}</span>
                 <span class="badge rounded-pill badge-soft">新增股票股利 {{ dividendSyncSummary.inserted_stock_dividends || 0 }}</span>
               </div>
-              <div class="table-scroll" style="max-height: 55vh">
+              <div class="table-scroll table-scroll-55vh">
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
@@ -2229,13 +2541,13 @@
                       <td>{{ row.inserted_stock_events }}</td>
                     </tr>
                     <tr v-if="!(dividendSyncSummary.stock_details || []).length">
-                      <td colspan="7" class="text-center" style="color: var(--text-dim)">尚無同步明細</td>
+                      <td colspan="7" class="text-center text-dim-small">尚無同步明細</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
-            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="showSyncDetailModal = false">關閉</button>
             </div>
           </div>
@@ -2243,10 +2555,10 @@
       </div>
 
       <!-- 無市價清單 Modal -->
-      <div v-if="showMissingPriceModal" class="modal d-block" style="background: rgba(0, 0, 0, 0.7)">
+      <div v-if="showMissingPriceModal" class="modal d-block modal-mask">
         <div class="modal-dialog modal-xl modal-dialog-centered">
-          <div class="modal-content glass" style="border-radius: 16px">
-            <div class="modal-header border-bottom" style="border-color: var(--line) !important">
+          <div class="modal-content glass modal-content-rounded">
+            <div class="modal-header border-bottom modal-section-border">
               <h5 class="modal-title">無市價清單</h5>
               <button type="button" class="btn-close btn-close-white" @click="showMissingPriceModal = false"></button>
             </div>
@@ -2254,7 +2566,7 @@
               <div class="d-flex flex-wrap gap-2 mb-2">
                 <span class="badge rounded-pill badge-soft">缺價檔數 {{ missingPriceList.length }}</span>
               </div>
-              <div class="table-scroll" style="max-height: 55vh">
+              <div class="table-scroll table-scroll-55vh">
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
@@ -2274,13 +2586,13 @@
                       <td>{{ row.last_trade_price === null ? '-' : fmtPrice(row.last_trade_price) }}</td>
                     </tr>
                     <tr v-if="!missingPriceList.length">
-                      <td colspan="5" class="text-center" style="color: var(--text-dim)">目前沒有缺價股票</td>
+                      <td colspan="5" class="text-center text-dim-small">目前沒有缺價股票</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </div>
-            <div class="modal-footer border-top" style="border-color: var(--line) !important">
+            <div class="modal-footer border-top modal-section-border">
               <button class="btn btn-outline-light" @click="showMissingPriceModal = false">關閉</button>
             </div>
           </div>
@@ -2289,8 +2601,8 @@
 
       <!-- AI 聊天室 Modal -->
       <div v-if="showChatModal" class="modal fade show d-block">
-        <div class="modal-dialog modal-dialog-scrollable" style="max-width: 450px; margin: 0 auto">
-          <div class="modal-content chat-modal" style="border-radius: 16px">
+        <div class="modal-dialog modal-dialog-scrollable chat-dialog-compact">
+          <div class="modal-content chat-modal chat-modal-rounded">
             <div class="modal-header d-flex justify-content-between align-items-center">
               <strong>AI 投資長智庫</strong>
               <button type="button" class="btn-close btn-close-white" @click="showChatModal = false"></button>
@@ -2301,7 +2613,7 @@
                   {{ msg.content }}
                 </div>
               </div>
-              <div class="modal-footer border-top d-flex gap-2 p-2" style="border-color: var(--line) !important">
+              <div class="modal-footer border-top d-flex gap-2 p-2 chat-modal-footer">
                 <input
                   v-model.trim="chatInput"
                   @keyup.enter="askAdvisor"
@@ -2317,7 +2629,7 @@
         </div>
       </div>
 
-      <button v-if="!showChatModal" class="btn btn-neon" style="position: fixed; bottom: 2rem; right: 2rem; z-index: 999; border-radius: 50%; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem" @click="showChatModal = true" title="打開 AI 顧問">
+      <button v-if="!showChatModal" class="btn btn-neon chat-fab" @click="showChatModal = true" title="打開 AI 顧問">
         💬
       </button>
 
@@ -2389,6 +2701,8 @@ const { createApp, nextTick } = Vue;
             nhiSettingsSaving: false,
             repairStockInfoLoading: false,
             repairStockInfoMessage: "",
+            dividendReconcileLoading: false,
+            dividendReconcileMessage: "",
             missingPriceLoading: false,
             missingPriceRefreshLoading: false,
             missingPriceList: [],
@@ -2591,6 +2905,24 @@ const { createApp, nextTick } = Vue;
             if (v > 200) return "status-safe";
             return "";
           },
+          systemToolBusy() {
+            return Boolean(
+              this.repairStockInfoLoading ||
+              this.dividendReconcileLoading ||
+              this.missingPriceLoading ||
+              this.missingPriceRefreshLoading,
+            );
+          },
+          systemToolBusyLabel() {
+            if (this.dividendReconcileLoading) return "股務重對帳";
+            if (this.repairStockInfoLoading) return "修復 stock_info";
+            if (this.missingPriceRefreshLoading) return "重抓缺價";
+            if (this.missingPriceLoading) return "讀取缺價清單";
+            return "-";
+          },
+          recalcJobRunning() {
+            return this.dividendRecalc.status === "queued" || this.dividendRecalc.status === "running";
+          },
           filteredTransactions() {
             if (!this.txFilter.stock_id && !this.txFilter.date_from && !this.txFilter.date_to) {
               return this.allTransactions.items;
@@ -2699,7 +3031,7 @@ const { createApp, nextTick } = Vue;
             if (!this.txTimelineFilter.only_cash_with_holdings) {
               return rows;
             }
-            return rows.filter((row) => row.eventType !== "cash" || Number(row.holding_shares || 0) > 0);
+            return rows.filter((row) => row.eventType !== "cash" || this.activeHoldingStockIds.has(row.stock_id));
           },
           timelineStats() {
             const rows = this.filteredTransactionTimelineRows || [];
@@ -2895,22 +3227,70 @@ const { createApp, nextTick } = Vue;
             this.txForm.trade_unit = "odd";
             this.txForm.trade_qty = shares;
           },
+          calcAutoFee(shares, price, isDca = false) {
+            const amount = Number(shares || 0) * Number(price || 0);
+            if (amount <= 0) return 0;
+            if (isDca) return 1;
+            const fee = Math.round(amount * 0.001425 * 0.6);
+            return Math.max(fee, 20);
+          },
+          calcAutoTax(stockId, action, shares, price) {
+            if (String(action || "") !== "sell") return 0;
+            const sid = this.normalizeStockId(stockId);
+            let rate = 0.003;
+            if (sid.endsWith("B") || sid.startsWith("00")) {
+              rate = 0.001;
+            }
+            return Number((Number(shares || 0) * Number(price || 0) * rate).toFixed(2));
+          },
+          inferFeeMode(fees, shares, price) {
+            const feeNum = Number(fees || 0);
+            const autoNormal = this.calcAutoFee(shares, price, false);
+            const autoDca = this.calcAutoFee(shares, price, true);
+            const eps = 1e-6;
+
+            if (Math.abs(feeNum - autoDca) <= eps) {
+              return { fee_mode: "auto", is_dca: true, fee_value: autoDca };
+            }
+            if (Math.abs(feeNum - autoNormal) <= eps) {
+              return { fee_mode: "auto", is_dca: false, fee_value: autoNormal };
+            }
+            return { fee_mode: "manual", is_dca: false, fee_value: feeNum };
+          },
+          txFeeModeMeta(tx) {
+            const inferred = this.inferFeeMode(tx?.fees, tx?.shares, tx?.price);
+            if (inferred.fee_mode === "auto") {
+              return {
+                label: inferred.is_dca ? "系統(定期)" : "系統",
+                className: "auto",
+                title: inferred.is_dca ? "系統計算：定期定額固定 1 元" : "系統計算：一般交易 6 折且最低 20 元",
+              };
+            }
+            return {
+              label: "手動",
+              className: "manual",
+              title: "手續費不符合系統公式，視為手動輸入",
+            };
+          },
+          txTaxModeMeta(tx) {
+            const expected = this.calcAutoTax(tx?.stock_id, tx?.action, tx?.shares, tx?.price);
+            const current = Number(tx?.transaction_tax || 0);
+            if (Math.abs(current - expected) <= 1e-6) {
+              return {
+                label: "系統稅率",
+                className: "auto",
+                title: "交易稅符合系統稅率公式",
+              };
+            }
+            return {
+              label: "手動覆寫",
+              className: "manual",
+              title: "交易稅與系統稅率不同",
+            };
+          },
           estimateFee() {
             if (this.txForm.fee_mode !== "auto") return;
-
-            const amount = Number(this.txForm.shares || 0) * Number(this.txForm.price || 0);
-            if (amount <= 0) {
-              this.txForm.fees = 0;
-              return;
-            }
-
-            if (this.txForm.is_dca) {
-              this.txForm.fees = 1;
-              return;
-            }
-
-            const fee = Math.round(amount * 0.001425 * 0.6);
-            this.txForm.fees = Math.max(fee, 20);
+            this.txForm.fees = this.calcAutoFee(this.txForm.shares, this.txForm.price, this.txForm.is_dca);
           },
           upsertStockOption(stock_id, chinese_name) {
             if (!stock_id) return;
@@ -3075,6 +3455,16 @@ const { createApp, nextTick } = Vue;
               this.toastTimerId = null;
             }, durationMs);
           },
+          buildDividendReconcileMessage(resp) {
+            const updatedCash = Number(resp.updated_cash_dividends || 0);
+            const deletedCash = Number(resp.deleted_cash_dividends || 0);
+            const updatedStock = Number(resp.updated_stock_dividends || 0);
+            const deletedStock = Number(resp.deleted_stock_dividends || 0);
+            return (
+              `對帳完成：現金股利更新 ${updatedCash}、刪除 ${deletedCash}；` +
+              `股票股利更新 ${updatedStock}、刪除 ${deletedStock}。`
+            );
+          },
           async saveTaxSettings() {
             this.taxSettingsSaving = true;
             try {
@@ -3140,6 +3530,23 @@ const { createApp, nextTick } = Vue;
               this.showToast(this.repairStockInfoMessage, "error", 4500);
             } finally {
               this.repairStockInfoLoading = false;
+            }
+          },
+          async reconcileDividendEvents() {
+            this.dividendReconcileLoading = true;
+            this.dividendReconcileMessage = "";
+            try {
+              const resp = await this.fetchJson("/api/dividends/reconcile?include_manual=false", {
+                method: "POST",
+              });
+              this.dividendReconcileMessage = this.buildDividendReconcileMessage(resp);
+              this.showToast(this.dividendReconcileMessage, "success", 4500);
+              await this.refreshAll(false);
+            } catch (err) {
+              this.dividendReconcileMessage = `股務對帳失敗: ${err.message || err}`;
+              this.showToast(this.dividendReconcileMessage, "error", 5000);
+            } finally {
+              this.dividendReconcileLoading = false;
             }
           },
           async loadMissingPriceList() {
@@ -3588,6 +3995,7 @@ const { createApp, nextTick } = Vue;
             });
           },
           editTransaction(tx) {
+            const inferred = this.inferFeeMode(tx.fees, tx.shares, tx.price);
             this.editingTxId = tx.id;
             this.txForm = {
               date: tx.date,
@@ -3597,9 +4005,9 @@ const { createApp, nextTick } = Vue;
               trade_qty: 0,
               shares: tx.shares,
               price: tx.price,
-              fees: tx.fees,
-              fee_mode: "manual",
-              is_dca: false,
+              fees: inferred.fee_value,
+              fee_mode: inferred.fee_mode,
+              is_dca: inferred.is_dca,
             };
             this.syncTradeInputFromShares();
             this.showAddTxModal = true;
@@ -3730,6 +4138,16 @@ const { createApp, nextTick } = Vue;
             if (dAdj < 60) return "loan-warn";
             if (dAdj < 90) return "loan-caution";
             return "";
+          },
+          loanMaintenanceClass(rate) {
+            const value = Number(rate);
+            if (!Number.isFinite(value)) return "";
+            if (value < 140) return "status-danger text-strong";
+            if (value < 167) return "status-warn text-strong";
+            return "status-safe";
+          },
+          loanNetProceedsClass(value) {
+            return Number(value) >= 0 ? "status-safe text-strong" : "status-danger text-strong";
           },
           localDateStr(d) {
             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

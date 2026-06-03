@@ -16,11 +16,11 @@
 ┌─────────────────────────────────────────────────────┐
 │  Ubuntu Server（VPS / QNAP / Raspberry Pi）          │
 │  /opt/asset_allocation/                              │
-│  ├── uvicorn :8000  (systemd 管理)                   │
+│  ├── uvicorn :8001  (systemd 管理)                   │
 │  ├── wealth.db      (SQLite WAL mode)                │
 │  └── Tailscale                                       │
 └──────────────────────┬──────────────────────────────┘
-                       │ Tailscale VPN（100.x.x.x:8000）
+                       │ Tailscale VPN（100.x.x.x:8001）
           ┌────────────┼────────────┐
           ▼            ▼            ▼
         手機          平板         電腦
@@ -38,14 +38,14 @@
 
 ## 前置條件
 
-| 項目 | 需求 |
-|---|---|
-| Ubuntu Server | 22.04 LTS 或 24.04 LTS（x86_64 或 ARM64）|
-| RAM | 最低 512 MB，建議 1 GB+ |
-| 磁碟 | 最低 2 GB |
-| Python | 3.11+（安裝腳本會自動處理） |
-| 連線 | 能連網（Tailscale 需要） |
-| 帳號 | Tailscale 帳號（免費，用 Google / GitHub 登入即可）|
+| 項目          | 需求                                                |
+| ------------- | --------------------------------------------------- |
+| Ubuntu Server | 22.04 LTS 或 24.04 LTS（x86_64 或 ARM64）           |
+| RAM           | 最低 512 MB，建議 1 GB+                             |
+| 磁碟          | 最低 2 GB                                           |
+| Python        | 3.11+（安裝腳本會自動處理）                         |
+| 連線          | 能連網（Tailscale 需要）                            |
+| 帳號          | Tailscale 帳號（免費，用 Google / GitHub 登入即可） |
 
 ---
 
@@ -136,7 +136,7 @@ sudo systemctl status wealth-app
 
 1. 在每台裝置安裝 Tailscale（iOS / Android / Windows / macOS）：https://tailscale.com/download
 2. 登入同一個 Tailscale 帳號
-3. 開啟瀏覽器，輸入 `http://<tailscale-ip>:8000`
+3. 開啟瀏覽器，輸入 `http://<tailscale-ip>:8001`
 
 > **注意：** Tailscale IP 格式為 `100.x.x.x`，可在 Tailscale 管理後台（admin.tailscale.com）查看每台裝置的 IP。
 
@@ -187,6 +187,15 @@ sudo systemctl stop wealth-app
 
 # 禁止開機自啟（如需暫停）
 sudo systemctl disable wealth-app
+
+# 卸載服務（保留資料）
+./remove-ubuntu.sh
+
+# 卸載服務並刪除程式（保留 wealth.db / backups / .env）
+./remove-ubuntu.sh --purge-app
+
+# 完整刪除（包含 wealth.db / backups / .env）
+./remove-ubuntu.sh --purge-app --purge-data
 ```
 
 ---
@@ -233,8 +242,9 @@ journalctl -u wealth-app -n 50 --no-pager
 ```
 
 常見原因：
+
 - `wealth.db` 不存在 → 執行 `python init_db.py` 或複製 DB 檔
-- Port 8000 被佔用 → `sudo lsof -i :8000` 找出並終止
+- Port 8001 被佔用 → `sudo lsof -i :8001` 找出並終止
 
 ### 從其他裝置連不到
 
@@ -247,7 +257,7 @@ journalctl -u wealth-app -n 50 --no-pager
 系統在台股交易時間（週一至週五 09:00–13:30）自動更新報價。如需手動刷新：
 
 ```bash
-curl -X POST http://localhost:8000/api/stock/refresh-prices
+curl -X POST http://localhost:8001/api/stock/refresh-prices
 ```
 
 ### 資料庫被鎖定（Database is locked）
@@ -263,10 +273,10 @@ sudo lsof /opt/asset_allocation/wealth.db
 
 ## 多人使用說明
 
-| 情境 | 結果 |
-|---|---|
-| 多人同時**查看**儀表板 | 完全無衝突，WAL 支援無限並發讀取 |
-| 多人同時**寫入**（新增交易等）| 自動排隊，每筆最多等 15 秒，日常使用感受不到 |
-| 背景股價更新 + 使用者操作 | 安全，WAL 自動處理讀寫分離 |
+| 情境                           | 結果                                         |
+| ------------------------------ | -------------------------------------------- |
+| 多人同時**查看**儀表板         | 完全無衝突，WAL 支援無限並發讀取             |
+| 多人同時**寫入**（新增交易等） | 自動排隊，每筆最多等 15 秒，日常使用感受不到 |
+| 背景股價更新 + 使用者操作      | 安全，WAL 自動處理讀寫分離                   |
 
 此系統設計為讀多寫少（家庭辦公室規模），SQLite WAL 模式完全足夠。

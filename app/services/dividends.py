@@ -889,6 +889,143 @@ def auto_sync_dividends(conn: sqlite3.Connection, years: int = 2) -> Dict[str, A
     }
 
 
+def reconcile_dividend_events(conn: sqlite3.Connection, include_manual: bool = False) -> Dict[str, Any]:
+    """
+    Reconcile dividend event holding snapshots against transaction history.
+
+    - cash_dividends: refresh holding_shares/cash_amount by ex_date holdings.
+    - stock_dividends: refresh holding_shares/bonus_shares/cash_return_amount.
+    - For non-manual sources, rows with zero holdings are removed as stale events.
+    - Manual rows are skipped by default unless include_manual=True.
+    """
+    updated_cash = 0
+    deleted_cash = 0
+    updated_stock = 0
+    deleted_stock = 0
+
+    cash_rows = conn.execute(
+        """
+        SELECT id, stock_id, ex_date, amount_per_share, holding_shares, cash_amount, source
+        FROM cash_dividends
+        ORDER BY id
+        """
+    ).fetchall()
+
+    for r in cash_rows:
+        source = str(r["source"] or "")
+        if (not include_manual) and source == "manual":
+            continue
+
+        rid = int(r["id"])
+        sid = normalize_stock_id(r["stock_id"])
+        ex_date = normalize_date(r["ex_date"])
+        amount_per_share = float(r["amount_per_share"] or 0.0)
+        actual_holding = float(get_shares_on_date(conn, sid, ex_date))
+        expected_cash_amount = round(actual_holding * amount_per_share, 2)
+
+        if actual_holding <= 1e-9:
+            if include_manual or source != "manual":
+                conn.execute("DELETE FROM cash_dividends WHERE id = ?", (rid,))
+                deleted_cash += 1
+            continue
+
+        stored_holding = float(r["holding_shares"] or 0.0)
+        stored_cash_amount = float(r["cash_amount"] or 0.0)
+        if (
+            abs(stored_holding - actual_holding) > 1e-9
+            or abs(stored_cash_amount - expected_cash_amount) > 1e-6
+        ):
+            conn.execute(
+                """
+                UPDATE cash_dividends
+                SET holding_shares = ?, cash_amount = ?
+                WHERE id = ?
+                """,
+                (actual_holding, expected_cash_amount, rid),
+            )
+            updated_cash += 1
+
+    stock_rows = conn.execute(
+        """
+        SELECT id, stock_id, ex_date, ratio, holding_shares, bonus_shares,
+               event_type, cash_return_per_share, cash_return_amount, source
+        FROM stock_dividends
+        ORDER BY id
+        """
+    ).fetchall()
+
+    for r in stock_rows:
+        source = str(r["source"] or "")
+        if (not include_manual) and source == "manual":
+            continue
+
+        rid = int(r["id"])
+        sid = normalize_stock_id(r["stock_id"])
+        ex_date = normalize_date(r["ex_date"])
+        ratio = float(r["ratio"] or 0.0)
+        event_type = str(r["event_type"] or "stock_dividend")
+        cash_return_per_share = float(r["cash_return_per_share"] or 0.0)
+
+        actual_holding = float(
+            get_shares_on_date(
+                conn,
+                sid,
+                ex_date,
+                stock_dividend_before_tx=False,
+                exclude_stock_dividend_id=rid,
+            )
+        )
+
+        if actual_holding <= 1e-9:
+            if include_manual or source != "manual":
+                conn.execute("DELETE FROM stock_dividends WHERE id = ?", (rid,))
+                deleted_stock += 1
+            continue
+
+        settlement = compute_stock_event_settlement(actual_holding, ratio)
+        expected_holding = float(settlement["base_shares"])
+        expected_bonus = float(settlement["share_delta"])
+
+        if expected_bonus < 0 and actual_holding + expected_bonus < 0:
+            expected_bonus = -float(int(actual_holding))
+
+        expected_cash_return_amount = (
+            round(expected_holding * cash_return_per_share, 2)
+            if event_type == "capital_reduction_cash"
+            else 0.0
+        )
+
+        stored_holding = float(r["holding_shares"] or 0.0)
+        stored_bonus = float(r["bonus_shares"] or 0.0)
+        stored_cash_return_amount = float(r["cash_return_amount"] or 0.0)
+
+        if (
+            abs(stored_holding - expected_holding) > 1e-9
+            or abs(stored_bonus - expected_bonus) > 1e-9
+            or abs(stored_cash_return_amount - expected_cash_return_amount) > 1e-6
+        ):
+            conn.execute(
+                """
+                UPDATE stock_dividends
+                SET holding_shares = ?, bonus_shares = ?, cash_return_amount = ?
+                WHERE id = ?
+                """,
+                (expected_holding, expected_bonus, expected_cash_return_amount, rid),
+            )
+            updated_stock += 1
+
+    if updated_stock > 0 or deleted_stock > 0:
+        rebuild_holdings_and_realized(conn)
+
+    return {
+        "updated_cash_dividends": updated_cash,
+        "deleted_cash_dividends": deleted_cash,
+        "updated_stock_dividends": updated_stock,
+        "deleted_stock_dividends": deleted_stock,
+        "include_manual": bool(include_manual),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Dividend recalc job helpers
 # ---------------------------------------------------------------------------

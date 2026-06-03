@@ -8,19 +8,19 @@
 
 ## 功能特色
 
-| 模組 | 說明 |
-|---|---|
-| **KPI 儀表板** | 庫存總市值、累計淨損益（含未實現）、已實現損益（含股息）、預估股息（本年度）、應繳利息 |
-| **彙整明細** | 全部歷史交易標的（含已出清）FIFO 成本、未實現損益；可切換「只看目前有庫存」 |
-| **交易明細** | 完整交易記錄，含 FIFO 逐筆已實現損益；支援股票/日期篩選 |
-| **借貸明細** | 融資借貸管理，自動計算應付利息、維持率；以擔保品下拉篩選；顯示最後償還日 |
-| **圖表** | 資產配置圓餅圖、損益分析長條圖 |
-| **CSV 匯出** | 三張表格均可一鍵匯出 CSV |
-| **即時報價** | 背景每 15 分鐘自動更新台股報價（盤中交易時間），支援 TWSE MIS / Stooq / Yahoo Finance 三源回退 |
-| **股息自動同步** | 從 Yahoo Finance / MOPS 同步現金股息與股票事件 |
-| **AI 顧問** | 整合 OpenAI / Anthropic，無 API Key 時自動切換本地規則引擎 |
-| **資料備份** | 本機定時備份 + Google Drive 異地備份 |
-| **多人存取** | SQLite WAL 模式 + Tailscale VPN，多裝置同時連線 |
+| 模組             | 說明                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| **KPI 儀表板**   | 庫存總市值、累計淨損益（含未實現）、已實現損益（含股息）、預估股息（本年度）、應繳利息         |
+| **彙整明細**     | 全部歷史交易標的（含已出清）FIFO 成本、未實現損益；可切換「只看目前有庫存」                    |
+| **交易明細**     | 完整交易記錄，含 FIFO 逐筆已實現損益；支援股票/日期篩選                                        |
+| **借貸明細**     | 融資借貸管理，自動計算應付利息、維持率；以擔保品下拉篩選；顯示最後償還日                       |
+| **圖表**         | 資產配置圓餅圖、損益分析長條圖                                                                 |
+| **CSV 匯出**     | 三張表格均可一鍵匯出 CSV                                                                       |
+| **即時報價**     | 背景每 15 分鐘自動更新台股報價（盤中交易時間），支援 TWSE MIS / Stooq / Yahoo Finance 三源回退 |
+| **股息自動同步** | 從 Yahoo Finance / MOPS 同步現金股息與股票事件                                                 |
+| **AI 顧問**      | 整合 OpenAI / Anthropic，無 API Key 時自動切換本地規則引擎                                     |
+| **資料備份**     | 本機定時備份 + Google Drive 異地備份                                                           |
+| **多人存取**     | SQLite WAL 模式 + Tailscale VPN，多裝置同時連線                                                |
 
 ---
 
@@ -49,10 +49,10 @@ cp .env.example .env
 # 編輯 .env 填入 API Keys
 
 # 5. 啟動
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-開啟瀏覽器：**http://127.0.0.1:8000**
+開啟瀏覽器：**http://127.0.0.1:8001**
 
 ---
 
@@ -70,11 +70,11 @@ data/
 
 CSV 支援的欄位（模糊比對，無需完全一致）：
 
-| 類型 | 必要欄位 |
-|---|---|
+| 類型 | 必要欄位                                |
+| ---- | --------------------------------------- |
 | 交易 | 交易日期、類別（買/賣）、股數、交易價格 |
-| 股息 | 除權息日、實領（或總計股息） |
-| 借貸 | 股票代號、已借金額、利率、起息日 |
+| 股息 | 除權息日、實領（或總計股息）            |
+| 借貸 | 股票代號、已借金額、利率、起息日        |
 
 ---
 
@@ -88,7 +88,7 @@ CSV 支援的欄位（模糊比對，無需完全一致）：
 任意裝置（手機 / 平板 / 電腦）
        │  Tailscale VPN
        ▼
-Ubuntu Server :8000
+Ubuntu Server :8001
 ├── uvicorn (systemd 管理，開機自啟)
 ├── FastAPI + SQLite WAL
 └── 背景排程（股價更新）
@@ -110,23 +110,26 @@ git push
 
 # Ubuntu Server（拉取最新版並重啟）
 ./deploy.sh
+
+# 若需卸載服務/刪除部署
+./remove-ubuntu.sh
 ```
 
 ---
 
 ## 環境變數（.env）
 
-| 變數 | 說明 | 預設值 |
-|---|---|---|
-| `ALLOWED_ORIGINS` | CORS 允許來源，Tailscale 環境設為 `*` | `http://localhost:8000` |
-| `DB_PATH` | SQLite 資料庫路徑 | `wealth.db` |
-| `OPENAI_API_KEY` | OpenAI API Key（AI 顧問用） | - |
-| `OPENAI_MODEL` | OpenAI 模型 | `gpt-4.1-mini` |
-| `ANTHROPIC_API_KEY` | Anthropic API Key（備援） | - |
-| `ANTHROPIC_MODEL` | Anthropic 模型 | `claude-3-5-sonnet-latest` |
-| `GDRIVE_CREDENTIALS_PATH` | Google Drive Service Account JSON 路徑 | - |
-| `GDRIVE_FOLDER_ID` | Google Drive 備份資料夾 ID | - |
-| `GDRIVE_KEEP_VERSIONS` | Drive 上保留幾份備份 | `7` |
+| 變數                      | 說明                                   | 預設值                     |
+| ------------------------- | -------------------------------------- | -------------------------- |
+| `ALLOWED_ORIGINS`         | CORS 允許來源，Tailscale 環境設為 `*`  | `http://localhost:8001`    |
+| `DB_PATH`                 | SQLite 資料庫路徑                      | `wealth.db`                |
+| `OPENAI_API_KEY`          | OpenAI API Key（AI 顧問用）            | -                          |
+| `OPENAI_MODEL`            | OpenAI 模型                            | `gpt-4.1-mini`             |
+| `ANTHROPIC_API_KEY`       | Anthropic API Key（備援）              | -                          |
+| `ANTHROPIC_MODEL`         | Anthropic 模型                         | `claude-3-5-sonnet-latest` |
+| `GDRIVE_CREDENTIALS_PATH` | Google Drive Service Account JSON 路徑 | -                          |
+| `GDRIVE_FOLDER_ID`        | Google Drive 備份資料夾 ID             | -                          |
+| `GDRIVE_KEEP_VERSIONS`    | Drive 上保留幾份備份                   | `7`                        |
 
 ---
 
@@ -135,7 +138,7 @@ git push
 ### 本機備份（API）
 
 ```bash
-curl -X POST http://localhost:8000/api/system/backup-db
+curl -X POST http://localhost:8001/api/system/backup-db
 ```
 
 備份檔存放於 `backups/wealth_backup_YYYYMMDD_HHMMSS.db`。
@@ -158,43 +161,43 @@ python backup_to_gdrive.py
 
 ## API 參考
 
-互動式文件請開啟：**http://127.0.0.1:8000/docs**
+互動式文件請開啟：**http://127.0.0.1:8001/docs**
 
-| 方法 | 路徑 | 說明 |
-|---|---|---|
-| GET | `/api/portfolio/summary` | 投資組合總覽 KPI |
-| GET | `/api/portfolio/performance` | 彙整明細（含損益） |
-| GET | `/api/portfolio/allocation` | 資產配置資料（圖表用） |
-| GET | `/api/portfolio/expected-dividends` | 預估股息 |
-| GET | `/api/transactions` | 交易明細列表 |
-| POST | `/api/transactions` | 新增交易 |
-| PUT | `/api/transactions/{id}` | 更新交易 |
-| DELETE | `/api/transactions/{id}` | 刪除交易 |
-| GET | `/api/loans/list` | 借貸明細 |
-| GET | `/api/loans/health` | 借貸健康報告 |
-| POST | `/api/loans` | 新增借貸 |
-| PUT | `/api/loans/{id}` | 更新借貸 |
-| DELETE | `/api/loans/{id}` | 刪除借貸 |
-| GET | `/api/dividends/cash` | 現金股息記錄 |
-| POST | `/api/dividends/cash` | 新增現金股息 |
-| DELETE | `/api/dividends/cash/{id}` | 刪除現金股息 |
-| GET | `/api/dividends/stock` | 股票事件記錄 |
-| POST | `/api/dividends/stock` | 新增股票事件 |
-| PUT | `/api/dividends/stock/{id}` | 更新股票事件 |
-| DELETE | `/api/dividends/stock/{id}` | 刪除股票事件 |
-| POST | `/api/dividends/auto-sync` | 自動同步股息（Yahoo/MOPS）|
-| POST | `/api/dividends/recalc-jobs` | 啟動股息重算工作 |
-| GET | `/api/dividends/recalc-jobs/{job_id}` | 查詢重算進度 |
-| GET | `/api/stock/{id}/quote` | 取得單一股票報價 |
-| POST | `/api/stock/refresh-prices` | 批次刷新報價 |
-| GET | `/api/settings/transaction-tax` | 取得交易稅設定 |
-| PUT | `/api/settings/transaction-tax` | 更新交易稅設定 |
-| GET | `/api/settings/dividend-nhi` | 取得補充健保設定 |
-| PUT | `/api/settings/dividend-nhi` | 更新補充健保設定 |
-| POST | `/api/system/backup-db` | 建立本機備份（`?offsite=true` 同時上傳 Drive）|
-| GET | `/api/system/audit-logs` | 系統稽核日誌 |
-| GET | `/api/system/data-health` | 資料健康報告 |
-| POST | `/api/ai/advisor` | AI 投資顧問 |
+| 方法   | 路徑                                  | 說明                                           |
+| ------ | ------------------------------------- | ---------------------------------------------- |
+| GET    | `/api/portfolio/summary`              | 投資組合總覽 KPI                               |
+| GET    | `/api/portfolio/performance`          | 彙整明細（含損益）                             |
+| GET    | `/api/portfolio/allocation`           | 資產配置資料（圖表用）                         |
+| GET    | `/api/portfolio/expected-dividends`   | 預估股息                                       |
+| GET    | `/api/transactions`                   | 交易明細列表                                   |
+| POST   | `/api/transactions`                   | 新增交易                                       |
+| PUT    | `/api/transactions/{id}`              | 更新交易                                       |
+| DELETE | `/api/transactions/{id}`              | 刪除交易                                       |
+| GET    | `/api/loans/list`                     | 借貸明細                                       |
+| GET    | `/api/loans/health`                   | 借貸健康報告                                   |
+| POST   | `/api/loans`                          | 新增借貸                                       |
+| PUT    | `/api/loans/{id}`                     | 更新借貸                                       |
+| DELETE | `/api/loans/{id}`                     | 刪除借貸                                       |
+| GET    | `/api/dividends/cash`                 | 現金股息記錄                                   |
+| POST   | `/api/dividends/cash`                 | 新增現金股息                                   |
+| DELETE | `/api/dividends/cash/{id}`            | 刪除現金股息                                   |
+| GET    | `/api/dividends/stock`                | 股票事件記錄                                   |
+| POST   | `/api/dividends/stock`                | 新增股票事件                                   |
+| PUT    | `/api/dividends/stock/{id}`           | 更新股票事件                                   |
+| DELETE | `/api/dividends/stock/{id}`           | 刪除股票事件                                   |
+| POST   | `/api/dividends/auto-sync`            | 自動同步股息（Yahoo/MOPS）                     |
+| POST   | `/api/dividends/recalc-jobs`          | 啟動股息重算工作                               |
+| GET    | `/api/dividends/recalc-jobs/{job_id}` | 查詢重算進度                                   |
+| GET    | `/api/stock/{id}/quote`               | 取得單一股票報價                               |
+| POST   | `/api/stock/refresh-prices`           | 批次刷新報價                                   |
+| GET    | `/api/settings/transaction-tax`       | 取得交易稅設定                                 |
+| PUT    | `/api/settings/transaction-tax`       | 更新交易稅設定                                 |
+| GET    | `/api/settings/dividend-nhi`          | 取得補充健保設定                               |
+| PUT    | `/api/settings/dividend-nhi`          | 更新補充健保設定                               |
+| POST   | `/api/system/backup-db`               | 建立本機備份（`?offsite=true` 同時上傳 Drive） |
+| GET    | `/api/system/audit-logs`              | 系統稽核日誌                                   |
+| GET    | `/api/system/data-health`             | 資料健康報告                                   |
+| POST   | `/api/ai/advisor`                     | AI 投資顧問                                    |
 
 ---
 
@@ -208,6 +211,7 @@ asset_allocation/
 ├── backup_to_gdrive.py      # Google Drive 備份腳本
 ├── setup-ubuntu.sh          # Ubuntu 伺服器初始化腳本
 ├── deploy.sh                # 部署更新腳本（在 server 執行）
+├── remove-ubuntu.sh         # 卸載服務 / 清理部署腳本
 ├── wealth-app.service       # systemd 服務設定
 ├── requirements.txt
 ├── .env.example

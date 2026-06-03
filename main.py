@@ -94,6 +94,7 @@ from app.services.dividends import (
     _extract_mops_detail_stock_event,
     sync_dividends_for_stock as _sync_dividends_for_stock,
     auto_sync_dividends as sync_dividends_from_market,
+    reconcile_dividend_events,
     detect_oversell_events,
     get_shares_on_date,
     compute_stock_event_settlement,
@@ -118,7 +119,7 @@ from app.services.ai import (
 # ---------------------------------------------------------------------------
 
 APP_DIR = Path(__file__).resolve().parent
-DB_PATH = Path("wealth.db")
+DB_PATH = Path(os.getenv("DB_PATH", "wealth.db"))
 _RUNTIME_SCHEMA_READY = False
 _LOCAL_STOCK_NAME_MAP: Optional[Dict[str, str]] = None
 _AUTO_STOCK_INFO_REPAIR_DONE = False
@@ -211,11 +212,19 @@ def _price_refresh_worker() -> None:
 def _startup_init() -> None:
     """Pre-warm DB schema, enable WAL mode, start background price scheduler."""
     if DB_PATH.exists():
-        with get_conn() as conn:
+        # Set WAL using a raw autocommit connection so it is not executed inside
+        # a transaction opened by schema migration helpers.
+        raw = sqlite3.connect(DB_PATH, timeout=15, isolation_level=None)
+        try:
             # WAL mode: multiple readers + 1 writer concurrently; persists across connections
-            conn.execute("PRAGMA journal_mode=WAL")
+            raw.execute("PRAGMA journal_mode=WAL")
             # Larger page cache improves read performance for concurrent users
-            conn.execute("PRAGMA cache_size=-8000")  # ~8 MB
+            raw.execute("PRAGMA cache_size=-8000")  # ~8 MB
+        finally:
+            raw.close()
+
+        with get_conn() as conn:
+            conn.execute("PRAGMA cache_size=-8000")
             conn.commit()
 
     _PRICE_REFRESH_STOP.clear()
@@ -833,6 +842,29 @@ def auto_sync_dividends_api(request: Request, force: bool = False, years: int = 
         "synced": True,
         "last_sync_date": today,
         **sync_result,
+    }
+
+
+@app.post("/api/dividends/reconcile")
+@_limiter.limit("6/minute")
+def reconcile_dividends_api(request: Request, include_manual: bool = False) -> Dict[str, Any]:
+    with get_conn() as conn:
+        result = reconcile_dividend_events(conn, include_manual=include_manual)
+        write_audit_log(
+            conn,
+            event_type="reconcile_dividend_events",
+            payload={
+                "include_manual": bool(include_manual),
+                **result,
+            },
+            severity="INFO",
+            actor="api",
+        )
+        conn.commit()
+
+    return {
+        "message": "dividend events reconciled",
+        **result,
     }
 
 
