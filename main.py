@@ -43,7 +43,8 @@ _DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
 
 app = FastAPI(title="Family Office Dashboard API", version="1.0.0")
 
-_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",") if o.strip()]
+_DEFAULT_ORIGINS = ["http://localhost:8000", "http://127.0.0.1:8000"]
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()] or _DEFAULT_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
@@ -2958,7 +2959,11 @@ def call_openai(question: str, snapshot: Dict[str, Any]) -> Optional[str]:
         with urllib.request.urlopen(req, timeout=40) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"]
-    except Exception:
+    except urllib.error.HTTPError as e:
+        print(f"[AI] OpenAI HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:200]}", flush=True)
+        return None
+    except Exception as e:
+        print(f"[AI] OpenAI error: {type(e).__name__}: {e}", flush=True)
         return None
 
 
@@ -2998,9 +3003,11 @@ def call_anthropic(question: str, snapshot: Dict[str, Any]) -> Optional[str]:
         with urllib.request.urlopen(req, timeout=40) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return "\n".join(part.get("text", "") for part in data.get("content", []) if part.get("type") == "text")
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as e:
+        print(f"[AI] Anthropic HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:200]}", flush=True)
         return None
-    except Exception:
+    except Exception as e:
+        print(f"[AI] Anthropic error: {type(e).__name__}: {e}", flush=True)
         return None
 
 

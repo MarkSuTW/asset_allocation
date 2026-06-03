@@ -622,6 +622,15 @@
           max-width: 100%;
         }
       }
+
+      /* 手機：隱藏交易表格次要欄位 */
+      @media (max-width: 768px) {
+        .hide-mobile { display: none !important; }
+        .table-scroll table { font-size: 0.8rem; }
+        .table-scroll th, .table-scroll td { padding: 0.3rem 0.4rem; }
+        .modal-dialog { margin: 0.5rem; }
+        .modal-dialog.modal-lg { max-width: 100%; }
+      }
     </style>
   </head>
   <body>
@@ -881,12 +890,12 @@
                       <th>動作</th>
                       <th>股數</th>
                       <th>單價</th>
-                      <th>手續費</th>
-                      <th>交易稅</th>
+                      <th class="hide-mobile">手續費</th>
+                      <th class="hide-mobile">交易稅</th>
                       <th>實現損益</th>
-                      <th>未實現損益</th>
-                      <th>報酬率</th>
-                      <th>交易後庫存</th>
+                      <th class="hide-mobile">未實現損益</th>
+                      <th class="hide-mobile">報酬率</th>
+                      <th class="hide-mobile">交易後庫存</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -902,18 +911,18 @@
                       </td>
                       <td>{{ tx.shares.toLocaleString() }}</td>
                       <td>{{ fmtPrice(tx.price) }}</td>
-                      <td>{{ fmt(tx.fees) }}</td>
-                      <td>{{ fmt(tx.transaction_tax) }}</td>
+                      <td class="hide-mobile">{{ fmt(tx.fees) }}</td>
+                      <td class="hide-mobile">{{ fmt(tx.transaction_tax) }}</td>
                       <td :class="tx.realized_profit >= 0 ? 'status-safe' : 'status-danger'">
                         {{ fmt(tx.realized_profit) }}
                       </td>
-                      <td :class="(tx.unrealized_profit_tx || 0) >= 0 ? 'status-safe' : 'status-danger'">
+                      <td class="hide-mobile" :class="(tx.unrealized_profit_tx || 0) >= 0 ? 'status-safe' : 'status-danger'">
                         {{ tx.unrealized_profit_tx === null ? '-' : fmt(tx.unrealized_profit_tx) }}
                       </td>
-                      <td>
+                      <td class="hide-mobile">
                         {{ tx.return_rate_tx === null ? '-' : `${tx.return_rate_tx.toFixed(2)}%` }}
                       </td>
-                      <td>{{ tx.inventory_after.toLocaleString() }}</td>
+                      <td class="hide-mobile">{{ tx.inventory_after.toLocaleString() }}</td>
                       <td>
                         <button class="btn btn-sm btn-outline-light me-1" @click="editTransaction(tx)">編輯</button>
                         <button class="btn btn-sm btn-outline-danger" @click="deleteTransaction(tx.id)">刪除</button>
@@ -1457,10 +1466,10 @@
                       <th class="sortable-th" @click="toggleLoanSort('collateral')" title="點擊排序">擔保品 {{ loanSortIcon('collateral') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('collateral_lots')" title="點擊排序">抵押張數 {{ loanSortIcon('collateral_lots') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('principal')" title="點擊排序">借款本金 {{ loanSortIcon('principal') }}</th>
-                      <th class="sortable-th" @click="toggleLoanSort('interest_rate')" title="點擊排序">利率 {{ loanSortIcon('interest_rate') }}</th>
-                      <th class="sortable-th" @click="toggleLoanSort('start_date')" title="點擊排序">起息日 {{ loanSortIcon('start_date') }}</th>
+                      <th class="sortable-th hide-mobile" @click="toggleLoanSort('interest_rate')" title="點擊排序">利率 {{ loanSortIcon('interest_rate') }}</th>
+                      <th class="sortable-th hide-mobile" @click="toggleLoanSort('start_date')" title="點擊排序">起息日 {{ loanSortIcon('start_date') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('due_date')" title="點擊排序">到期日 {{ loanSortIcon('due_date') }}</th>
-                      <th class="sortable-th" @click="toggleLoanSort('accrued_interest')" title="點擊排序">應繳利息 {{ loanSortIcon('accrued_interest') }}</th>
+                      <th class="sortable-th hide-mobile" @click="toggleLoanSort('accrued_interest')" title="點擊排序">應繳利息 {{ loanSortIcon('accrued_interest') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('maintenance_rate')" title="點擊排序">維持率 {{ loanSortIcon('maintenance_rate') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('net_proceeds')" title="點擊排序">實拿金額 {{ loanSortIcon('net_proceeds') }}</th>
                       <th>操作</th>
@@ -1478,8 +1487,8 @@
                         <span v-if="loan.principal > 0">{{ fmt(loan.principal) }}</span>
                         <span v-else class="badge" style="background:rgba(0,208,255,0.15);color:var(--accent-a);font-size:0.78rem;padding:2px 6px;border-radius:4px">純擔保</span>
                       </td>
-                      <td>{{ loan.principal > 0 ? (loan.interest_rate * 100).toFixed(2) + '%' : '—' }}</td>
-                      <td>{{ loan.start_date }}</td>
+                      <td class="hide-mobile">{{ loan.principal > 0 ? (loan.interest_rate * 100).toFixed(2) + '%' : '—' }}</td>
+                      <td class="hide-mobile">{{ loan.start_date }}</td>
                       <td>
                         <div v-if="loan.due_date">{{ loan.due_date }}</div>
                         <div v-if="loan.days_to_due !== null && loan.days_to_due !== undefined" style="font-size:0.8em;margin-top:1px">
@@ -1488,7 +1497,7 @@
                         </div>
                         <span v-if="!loan.due_date" style="color:var(--text-dim)">—</span>
                       </td>
-                      <td>{{ fmt(loan.accrued_interest) }}</td>
+                      <td class="hide-mobile">{{ fmt(loan.accrued_interest) }}</td>
                       <td>
                         <span v-if="loan.maintenance_rate !== null && loan.maintenance_rate !== undefined"
                           :style="{ color: loan.maintenance_rate < 140 ? 'var(--danger)' : loan.maintenance_rate < 167 ? 'var(--warn)' : 'var(--ok)', fontWeight: loan.maintenance_rate < 167 ? '600' : '400' }">
@@ -1510,8 +1519,8 @@
                       <td colspan="2" style="color:var(--text-dim)">合計 {{ filteredLoans.length }} 筆</td>
                       <td></td>
                       <td>{{ fmt(loanTotals.principal) }}</td>
-                      <td></td><td></td><td></td>
-                      <td>{{ fmt(loanTotals.accrued_interest) }}</td>
+                      <td class="hide-mobile"></td><td class="hide-mobile"></td><td></td>
+                      <td class="hide-mobile">{{ fmt(loanTotals.accrued_interest) }}</td>
                       <td></td>
                       <td :style="{ color: loanTotals.net_proceeds >= 0 ? 'var(--ok)' : 'var(--danger)' }">{{ fmt(loanTotals.net_proceeds) }}</td>
                       <td></td>
@@ -3400,6 +3409,15 @@
                 }
               }
 
+              if (!this.txForm.date) {
+                this.txError = "請填入交易日期";
+                return;
+              }
+              if (Number(this.txForm.price) <= 0) {
+                this.txError = "單價必須大於 0";
+                return;
+              }
+
               this.syncSharesFromTradeInput();
 
               const payload = {
@@ -3535,6 +3553,18 @@
           },
           async saveLoan() {
             if (this.loanSaving) return;
+            if (!this.loanForm.lender.trim()) {
+              this.showToast("請填入金融機構代號", "error"); return;
+            }
+            if (!this.loanForm.collateral.trim()) {
+              this.showToast("請填入擔保品證券代號", "error"); return;
+            }
+            if (!this.loanForm.start_date) {
+              this.showToast("請填入起息日", "error"); return;
+            }
+            if (this.loanForm.principal === 0 && Number(this.loanForm.interest_rate) > 0) {
+              this.showToast("純擔保（本金=0）利率必須填 0", "error"); return;
+            }
             this.loanSaving = true;
             try {
               const payload = {
