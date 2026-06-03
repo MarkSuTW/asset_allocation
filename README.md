@@ -115,6 +115,15 @@ git push
 ./remove-ubuntu.sh
 ```
 
+若要改成「前端按鈕一鍵重部署」（不手動下指令），請先於 Ubuntu 的 `.env` 加上：
+
+```env
+WEB_REDEPLOY_ENABLED=true
+WEB_REDEPLOY_TOKEN=<請改成長隨機字串>
+# 可選：預設為 wealth-app-redeploy
+# WEB_REDEPLOY_UNIT=wealth-app-redeploy
+```
+
 ---
 
 ## 環境變數（.env）
@@ -130,6 +139,9 @@ git push
 | `GDRIVE_CREDENTIALS_PATH` | Google Drive Service Account JSON 路徑 | -                          |
 | `GDRIVE_FOLDER_ID`        | Google Drive 備份資料夾 ID             | -                          |
 | `GDRIVE_KEEP_VERSIONS`    | Drive 上保留幾份備份                   | `7`                        |
+| `WEB_REDEPLOY_ENABLED`    | 啟用網頁一鍵重部署 API                 | `false`                    |
+| `WEB_REDEPLOY_TOKEN`      | 觸發重部署所需 Token                   | -                          |
+| `WEB_REDEPLOY_UNIT`       | systemd transient unit 名稱            | `wealth-app-redeploy`      |
 
 ---
 
@@ -195,6 +207,8 @@ python backup_to_gdrive.py
 | GET    | `/api/settings/dividend-nhi`          | 取得補充健保設定                               |
 | PUT    | `/api/settings/dividend-nhi`          | 更新補充健保設定                               |
 | POST   | `/api/system/backup-db`               | 建立本機備份（`?offsite=true` 同時上傳 Drive） |
+| POST   | `/api/system/redeploy/start`          | 啟動網頁一鍵重部署（需 `X-Deploy-Token`）      |
+| GET    | `/api/system/redeploy/status`         | 查詢重部署工作狀態與最近 log                    |
 | GET    | `/api/system/audit-logs`              | 系統稽核日誌                                   |
 | GET    | `/api/system/data-health`             | 資料健康報告                                   |
 | POST   | `/api/ai/advisor`                     | AI 投資顧問                                    |

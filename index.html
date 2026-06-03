@@ -1463,7 +1463,7 @@
                 <div class="mb-2 text-dim-small">
                   <label class="form-check-label small">
                     <input class="form-check-input me-1" type="checkbox" v-model="txTimelineFilter.only_cash_with_holdings" />
-                    只顯示有持股的配息事件
+                    只顯示有持股的事件
                   </label>
                 </div>
                 <div class="d-flex flex-wrap gap-2 mb-2">
@@ -1611,6 +1611,9 @@
                     <button class="btn btn-outline-info" @click="reconcileDividendEvents" :disabled="systemToolBusy">
                       {{ dividendReconcileLoading ? '對帳中...' : '一鍵股務重對帳' }}
                     </button>
+                    <button class="btn btn-outline-primary" @click="triggerWebRedeploy" :disabled="systemToolBusy">
+                      {{ redeployLoading ? '重部署中...' : '一鍵自動重新部署' }}
+                    </button>
                     <button class="btn btn-outline-warning" @click="repairStockInfo" :disabled="systemToolBusy">
                       {{ repairStockInfoLoading ? '修復中...' : '一鍵修復 stock_info' }}
                     </button>
@@ -1630,6 +1633,9 @@
                 </div>
                 <div v-if="dividendReconcileMessage" class="mt-1 small system-tool-message" aria-live="polite">
                   {{ dividendReconcileMessage }}
+                </div>
+                <div v-if="redeployMessage" class="mt-1 small system-tool-message" aria-live="polite">
+                  {{ redeployMessage }}
                 </div>
 
                 <hr class="panel-divider" />
@@ -2703,6 +2709,10 @@ const { createApp, nextTick } = Vue;
             repairStockInfoMessage: "",
             dividendReconcileLoading: false,
             dividendReconcileMessage: "",
+            redeployLoading: false,
+            redeployMessage: "",
+            redeployPollingId: null,
+            redeployPollFailures: 0,
             missingPriceLoading: false,
             missingPriceRefreshLoading: false,
             missingPriceList: [],
@@ -2909,12 +2919,14 @@ const { createApp, nextTick } = Vue;
             return Boolean(
               this.repairStockInfoLoading ||
               this.dividendReconcileLoading ||
+              this.redeployLoading ||
               this.missingPriceLoading ||
               this.missingPriceRefreshLoading,
             );
           },
           systemToolBusyLabel() {
             if (this.dividendReconcileLoading) return "股務重對帳";
+            if (this.redeployLoading) return "自動重新部署";
             if (this.repairStockInfoLoading) return "修復 stock_info";
             if (this.missingPriceRefreshLoading) return "重抓缺價";
             if (this.missingPriceLoading) return "讀取缺價清單";
@@ -3031,7 +3043,7 @@ const { createApp, nextTick } = Vue;
             if (!this.txTimelineFilter.only_cash_with_holdings) {
               return rows;
             }
-            return rows.filter((row) => row.eventType !== "cash" || this.activeHoldingStockIds.has(row.stock_id));
+            return rows.filter((row) => this.activeHoldingStockIds.has(row.stock_id));
           },
           timelineStats() {
             const rows = this.filteredTransactionTimelineRows || [];
@@ -3547,6 +3559,110 @@ const { createApp, nextTick } = Vue;
               this.showToast(this.dividendReconcileMessage, "error", 5000);
             } finally {
               this.dividendReconcileLoading = false;
+            }
+          },
+          getDeployToken() {
+            try {
+              return (localStorage.getItem("webRedeployToken") || "").trim();
+            } catch (_) {
+              return "";
+            }
+          },
+          setDeployToken(token) {
+            try {
+              localStorage.setItem("webRedeployToken", token);
+            } catch (_) {}
+          },
+          stopRedeployPolling() {
+            if (this.redeployPollingId) {
+              clearInterval(this.redeployPollingId);
+              this.redeployPollingId = null;
+            }
+          },
+          async checkRedeployStatus() {
+            const status = await this.fetchJson("/api/system/redeploy/status");
+            const active = String(status.active_state || "");
+            const result = String(status.result || "");
+
+            if (active === "active" || active === "activating") {
+              this.redeployMessage = "自動重新部署執行中，請稍候...";
+              return;
+            }
+
+            if (result === "success") {
+              this.redeployLoading = false;
+              this.stopRedeployPolling();
+              this.redeployMessage = "重新部署完成，系統將自動回復連線。";
+              this.showToast(this.redeployMessage, "success", 4500);
+              setTimeout(() => {
+                location.reload();
+              }, 2000);
+              return;
+            }
+
+            if (result && result !== "success") {
+              this.redeployLoading = false;
+              this.stopRedeployPolling();
+              const tail = Array.isArray(status.log_tail) && status.log_tail.length
+                ? ` 最後訊息：${status.log_tail[status.log_tail.length - 1]}`
+                : "";
+              this.redeployMessage = `重新部署失敗（${result}）。${tail}`;
+              this.showToast(this.redeployMessage, "error", 6000);
+              return;
+            }
+
+            this.redeployMessage = "已送出重新部署工作，等待系統回報狀態...";
+          },
+          async triggerWebRedeploy() {
+            if (this.systemToolBusy) return;
+            if (!confirm("確認要立即執行一鍵重新部署？過程中服務可能短暫中斷。")) return;
+
+            let token = this.getDeployToken();
+            if (!token) {
+              token = (prompt("請輸入重部署 Token（僅首次需要）") || "").trim();
+              if (!token) {
+                this.showToast("未輸入 Token，已取消。", "warning", 3500);
+                return;
+              }
+              this.setDeployToken(token);
+            }
+
+            this.redeployLoading = true;
+            this.redeployMessage = "送出重新部署工作中...";
+            this.redeployPollFailures = 0;
+
+            try {
+              await this.fetchJson("/api/system/redeploy/start", {
+                method: "POST",
+                headers: {
+                  "X-Deploy-Token": token,
+                },
+              });
+              this.redeployMessage = "已送出重新部署工作，系統正在執行。";
+              this.showToast("重新部署已啟動。", "success", 2800);
+
+              this.stopRedeployPolling();
+              await this.checkRedeployStatus();
+              this.redeployPollingId = setInterval(async () => {
+                if (!this.redeployLoading) return;
+                try {
+                  await this.checkRedeployStatus();
+                  this.redeployPollFailures = 0;
+                } catch (err) {
+                  this.redeployPollFailures += 1;
+                  if (this.redeployPollFailures >= 8) {
+                    this.redeployLoading = false;
+                    this.stopRedeployPolling();
+                    this.redeployMessage = `無法確認重新部署狀態：${err.message || err}`;
+                    this.showToast(this.redeployMessage, "warning", 5500);
+                  }
+                }
+              }, 3000);
+            } catch (err) {
+              this.redeployLoading = false;
+              this.stopRedeployPolling();
+              this.redeployMessage = `啟動重新部署失敗: ${err.message || err}`;
+              this.showToast(this.redeployMessage, "error", 6000);
             }
           },
           async loadMissingPriceList() {
@@ -4378,6 +4494,7 @@ const { createApp, nextTick } = Vue;
         },
         beforeUnmount() {
           this.stopDividendRecalcPolling();
+          this.stopRedeployPolling();
           this.stopPriceAutoRefresh();
         },
       }).mount("#app");

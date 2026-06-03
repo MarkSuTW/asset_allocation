@@ -168,6 +168,42 @@ cd /opt/asset_allocation
 
 `deploy.sh` 自動執行：`git pull → pip install → systemctl restart`。
 
+### 啟用前端「一鍵自動重新部署」按鈕
+
+1. 設定 `.env`：
+
+```bash
+nano /opt/asset_allocation/.env
+```
+
+加入：
+
+```env
+WEB_REDEPLOY_ENABLED=true
+WEB_REDEPLOY_TOKEN=<請改成長隨機字串>
+WEB_REDEPLOY_UNIT=wealth-app-redeploy
+```
+
+2. 設定 sudoers（讓服務帳號可無密碼執行 `systemd-run` 與 `systemctl`）：
+
+```bash
+sudo visudo -f /etc/sudoers.d/wealth-app-redeploy
+```
+
+填入（假設服務跑在 `ubuntu` 使用者）：
+
+```text
+ubuntu ALL=(root) NOPASSWD:/usr/bin/systemd-run,/usr/bin/systemctl
+```
+
+3. 重新啟動服務使環境變數生效：
+
+```bash
+sudo systemctl restart wealth-app
+```
+
+完成後可在系統工具區按「一鍵自動重新部署」，不用再 SSH 下部署指令。
+
 ---
 
 ## 服務管理

@@ -4,7 +4,9 @@ All business logic lives in app/ modules; this file wires them together.
 """
 import json
 import os
+import shlex
 import sqlite3
+import subprocess
 import threading
 import uuid
 from datetime import date, datetime
@@ -125,6 +127,9 @@ _LOCAL_STOCK_NAME_MAP: Optional[Dict[str, str]] = None
 _AUTO_STOCK_INFO_REPAIR_DONE = False
 _DIVIDEND_RECALC_JOBS: Dict[str, Dict[str, Any]] = {}
 _DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
+_WEB_REDEPLOY_ENABLED = os.getenv("WEB_REDEPLOY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+_WEB_REDEPLOY_TOKEN = os.getenv("WEB_REDEPLOY_TOKEN", "").strip()
+_WEB_REDEPLOY_UNIT = os.getenv("WEB_REDEPLOY_UNIT", "wealth-app-redeploy").strip() or "wealth-app-redeploy"
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -741,6 +746,98 @@ def backup_database_api(offsite: bool = False) -> Dict[str, Any]:
         "size_bytes": int(size_bytes),
         "offsite": offsite_result,
         "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+@app.post("/api/system/redeploy/start")
+def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[str, Any]:
+    if not _WEB_REDEPLOY_ENABLED:
+        raise HTTPException(status_code=403, detail="web redeploy is disabled")
+    if not _WEB_REDEPLOY_TOKEN:
+        raise HTTPException(status_code=500, detail="WEB_REDEPLOY_TOKEN is not configured")
+
+    provided_token = (token or request.headers.get("x-deploy-token") or "").strip()
+    if provided_token != _WEB_REDEPLOY_TOKEN:
+        raise HTTPException(status_code=403, detail="invalid deploy token")
+
+    deploy_cmd = f"cd {shlex.quote(str(APP_DIR))} && ./deploy.sh main"
+    cmd = [
+        "sudo",
+        "-n",
+        "systemd-run",
+        "--unit",
+        _WEB_REDEPLOY_UNIT,
+        "--collect",
+        "--property=Type=oneshot",
+        "/bin/bash",
+        "-lc",
+        deploy_cmd,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        raise HTTPException(
+            status_code=500,
+            detail=f"failed to start redeploy job: {stderr or 'systemd-run failed'}",
+        )
+
+    return {
+        "message": "redeploy job started",
+        "unit": _WEB_REDEPLOY_UNIT,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+    }
+
+
+@app.get("/api/system/redeploy/status")
+def get_web_redeploy_status() -> Dict[str, Any]:
+    show_cmd = [
+        "systemctl",
+        "show",
+        _WEB_REDEPLOY_UNIT,
+        "--property=Id,LoadState,ActiveState,SubState,Result,ExecMainStatus,ExecMainCode,StateChangeTimestamp",
+        "--no-page",
+    ]
+    proc = subprocess.run(show_cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return {
+            "unit": _WEB_REDEPLOY_UNIT,
+            "exists": False,
+            "active_state": "inactive",
+            "sub_state": "dead",
+            "result": "unknown",
+        }
+
+    state: Dict[str, str] = {}
+    for line in (proc.stdout or "").splitlines():
+        if "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        state[k.strip()] = v.strip()
+
+    journal_cmd = [
+        "journalctl",
+        "-u",
+        _WEB_REDEPLOY_UNIT,
+        "-n",
+        "20",
+        "--no-pager",
+        "-o",
+        "cat",
+    ]
+    jp = subprocess.run(journal_cmd, capture_output=True, text=True)
+    logs = [ln for ln in (jp.stdout or "").splitlines() if ln.strip()][-10:]
+
+    return {
+        "unit": _WEB_REDEPLOY_UNIT,
+        "exists": True,
+        "load_state": state.get("LoadState", ""),
+        "active_state": state.get("ActiveState", ""),
+        "sub_state": state.get("SubState", ""),
+        "result": state.get("Result", ""),
+        "exec_main_code": state.get("ExecMainCode", ""),
+        "exec_main_status": state.get("ExecMainStatus", ""),
+        "state_changed_at": state.get("StateChangeTimestamp", ""),
+        "log_tail": logs,
     }
 
 
