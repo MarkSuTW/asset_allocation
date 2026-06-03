@@ -179,7 +179,7 @@ def _fetch_twse_openapi(code_candidates: List[str]) -> Optional[float]:
                     payload = json.loads(resp.read().decode("utf-8"))
                 rows = payload.get("data", [])
                 if rows:
-                    prices = [parse_quote_price(r[6]) for r in rows if len(r) > 6]
+                    prices = [parse_quote_price(str(r[6]).replace(",", "")) for r in rows if len(r) > 6]
                     prices = [p for p in prices if p is not None]
                     if prices:
                         return prices[-1]
