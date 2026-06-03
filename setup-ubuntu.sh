@@ -6,10 +6,19 @@ set -euo pipefail
 APP_DIR=/opt/asset_allocation
 REPO_URL=https://github.com/MarkSuTW/asset_allocation.git
 APP_USER=$(whoami)
+PYTHON_BIN=""
 
 echo "=== [1/6] Installing system packages ==="
 sudo apt-get update -qq
-sudo apt-get install -y python3.11 python3.11-venv python3-pip git curl
+
+# Prefer Python 3.11 when available; otherwise fall back to system python3.
+if apt-cache show python3.11 >/dev/null 2>&1 && apt-cache show python3.11-venv >/dev/null 2>&1; then
+    sudo apt-get install -y python3.11 python3.11-venv python3-pip git curl
+    PYTHON_BIN=python3.11
+else
+    sudo apt-get install -y python3 python3-venv python3-pip git curl
+    PYTHON_BIN=python3
+fi
 
 echo "=== [2/6] Installing Tailscale ==="
 curl -fsSL https://tailscale.com/install.sh | sh
@@ -26,7 +35,7 @@ git clone "$REPO_URL" "$APP_DIR"
 cd "$APP_DIR"
 
 echo "=== [4/6] Creating Python virtual environment ==="
-python3.11 -m venv .venv
+"$PYTHON_BIN" -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip --quiet
 pip install -r requirements.txt --quiet
