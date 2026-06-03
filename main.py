@@ -770,6 +770,7 @@ def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[st
         _WEB_REDEPLOY_UNIT,
         "--property=Type=oneshot",
         "--collect",
+        "--no-block",
     ]
     if _WEB_REDEPLOY_RUN_AS:
         cmd.extend(["--uid", _WEB_REDEPLOY_RUN_AS])
@@ -778,7 +779,7 @@ def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[st
         "-lc",
         deploy_cmd,
     ])
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, start_new_session=True)
     if proc.returncode != 0:
         out = (proc.stdout or "").strip()
         err = (proc.stderr or "").strip()
