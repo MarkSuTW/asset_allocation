@@ -654,6 +654,9 @@
           <span class="status-pill" v-if="priceAutoRefreshActive">
             <span class="price-refresh-dot"></span>自動更新報價中
           </span>
+          <button class="btn btn-outline-info btn-sm" @click="manualRefreshPrices" :disabled="priceRefreshing" title="立即抓取所有持股最新市價">
+            {{ priceRefreshing ? '更新中...' : '📈 更新報價' }}
+          </button>
           <button class="btn btn-outline-light" @click="refreshAll" :disabled="isRefreshing">
             {{ isRefreshing ? '更新中...' : '重新整理' }}
           </button>
@@ -2291,6 +2294,7 @@
             loanSort: { col: "collateral", dir: "asc" },
             priceAutoRefreshTimer: null,
             priceAutoRefreshActive: false,
+            priceRefreshing: false,
             showLoanModal: false,
             loanModalMode: "add",
             showDeleteLoanConfirm: false,
@@ -3623,6 +3627,24 @@
             if (day === 0 || day === 6) return false;
             const mins = tw.getHours() * 60 + tw.getMinutes();
             return mins >= 9 * 60 && mins <= 13 * 60 + 30;
+          },
+          async manualRefreshPrices() {
+            if (this.priceRefreshing) return;
+            this.priceRefreshing = true;
+            try {
+              const r = await this.fetchJson("/api/stock/refresh-prices?scope=holdings&limit=500", { method: "POST" });
+              await Promise.all([
+                this.fetchJson("/api/portfolio/summary").then(d => { this.summary = d; }),
+                this.fetchJson("/api/portfolio/performance").then(d => { this.performance = d; }),
+                this.fetchJson("/api/portfolio/allocation").then(d => { this.allocation = d; }),
+                this.fetchJson("/api/loans/health").then(d => { this.loans = d; }),
+              ]);
+              this.showToast(`報價已更新：${r.updated || 0} 檔`, "success", 2500);
+            } catch (err) {
+              this.showToast(`更新報價失敗: ${err.message || err}`, "error");
+            } finally {
+              this.priceRefreshing = false;
+            }
           },
           startPriceAutoRefresh() {
             if (this.priceAutoRefreshTimer) return;

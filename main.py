@@ -58,12 +58,53 @@ app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
+_TZ_TAIPEI = __import__("datetime").timezone(__import__("datetime").timedelta(hours=8))
+_PRICE_REFRESH_STOP = threading.Event()
+_PRICE_REFRESH_INTERVAL_SEC = 15 * 60  # 15 minutes
+
+
+def _is_taiwan_trading_time() -> bool:
+    from datetime import datetime as _dt
+    now = _dt.now(_TZ_TAIPEI)
+    if now.weekday() >= 5:          # Saturday=5, Sunday=6
+        return False
+    mins = now.hour * 60 + now.minute
+    return 9 * 60 <= mins <= 13 * 60 + 30
+
+
+def _price_refresh_worker() -> None:
+    """Background thread: refresh holdings prices every 15 min during trading hours."""
+    while not _PRICE_REFRESH_STOP.wait(_PRICE_REFRESH_INTERVAL_SEC):
+        if not _is_taiwan_trading_time():
+            continue
+        if not DB_PATH.exists():
+            continue
+        try:
+            with get_conn() as conn:
+                result = refresh_market_prices(conn, limit=200, scope="holdings")
+                conn.commit()
+            updated = result.get("updated", 0)
+            if updated:
+                print(f"[scheduler] auto price refresh: {updated} stocks updated", flush=True)
+        except Exception as e:
+            print(f"[scheduler] price refresh error: {type(e).__name__}: {e}", flush=True)
+
+
 @app.on_event("startup")
 def _startup_init() -> None:
-    """Pre-warm DB schema and stock-info integrity on server start."""
+    """Pre-warm DB schema, start background price scheduler."""
     if DB_PATH.exists():
         with get_conn() as conn:
             conn  # get_conn() already calls ensure_runtime_schema + auto_repair
+
+    _PRICE_REFRESH_STOP.clear()
+    t = threading.Thread(target=_price_refresh_worker, daemon=True, name="price-scheduler")
+    t.start()
+
+
+@app.on_event("shutdown")
+def _shutdown_cleanup() -> None:
+    _PRICE_REFRESH_STOP.set()
 
 
 class TransactionCreate(BaseModel):

@@ -5,3 +5,7 @@ google-api-python-client>=2.176,<3.0
 google-auth>=2.35,<3.0
 google-auth-httplib2>=0.2,<0.3
 slowapi>=0.1.9,<0.2
+
+# Dev / testing
+pytest>=9.0,<10.0
+httpx>=0.28,<0.29
