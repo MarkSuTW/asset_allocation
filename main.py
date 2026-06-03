@@ -130,6 +130,7 @@ _DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
 _WEB_REDEPLOY_ENABLED = os.getenv("WEB_REDEPLOY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 _WEB_REDEPLOY_TOKEN = os.getenv("WEB_REDEPLOY_TOKEN", "").strip()
 _WEB_REDEPLOY_UNIT = os.getenv("WEB_REDEPLOY_UNIT", "wealth-app-redeploy").strip() or "wealth-app-redeploy"
+_WEB_REDEPLOY_RUN_AS = os.getenv("WEB_REDEPLOY_RUN_AS", "").strip()
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -767,12 +768,15 @@ def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[st
         "systemd-run",
         "--unit",
         _WEB_REDEPLOY_UNIT,
-        "--collect",
         "--property=Type=oneshot",
+    ]
+    if _WEB_REDEPLOY_RUN_AS:
+        cmd.extend(["--uid", _WEB_REDEPLOY_RUN_AS])
+    cmd.extend([
         "/bin/bash",
         "-lc",
         deploy_cmd,
-    ]
+    ])
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
         stderr = (proc.stderr or "").strip()
