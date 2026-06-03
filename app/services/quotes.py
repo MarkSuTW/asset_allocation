@@ -155,25 +155,38 @@ def _fetch_yahoo_v8_chart(symbols: List[str]) -> Optional[float]:
     return None
 
 
+_twse_last_call: float = 0.0
+_TWSE_CALL_INTERVAL = 0.8  # seconds between TWSE openapi calls
+
+
 def _fetch_twse_openapi(code_candidates: List[str]) -> Optional[float]:
     """Try TWSE rwd API (recent daily data). Returns close_price or None."""
+    global _twse_last_call
+    elapsed = time.monotonic() - _twse_last_call
+    if elapsed < _TWSE_CALL_INTERVAL:
+        time.sleep(_TWSE_CALL_INTERVAL - elapsed)
+    _twse_last_call = time.monotonic()
+
     for code in code_candidates:
         url = (
             "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
             f"?stockNo={urllib.parse.quote(code)}&response=json"
         )
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=6, context=ssl._create_unverified_context()) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
-            rows = payload.get("data", [])
-            if rows:
-                prices = [parse_quote_price(r[6]) for r in rows if len(r) > 6]
-                prices = [p for p in prices if p is not None]
-                if prices:
-                    return prices[-1]
-        except Exception:
-            continue
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req, timeout=8, context=ssl._create_unverified_context()) as resp:
+                    payload = json.loads(resp.read().decode("utf-8"))
+                rows = payload.get("data", [])
+                if rows:
+                    prices = [parse_quote_price(r[6]) for r in rows if len(r) > 6]
+                    prices = [p for p in prices if p is not None]
+                    if prices:
+                        return prices[-1]
+                break
+            except Exception:
+                if attempt == 0:
+                    time.sleep(1.5)
     return None
 
 
@@ -401,9 +414,7 @@ def refresh_market_prices(
 
     updated = 0
     items: List[Dict[str, Any]] = []
-    for i, sid in enumerate(resolved_stock_ids):
-        if i > 0:
-            time.sleep(0.3)  # avoid TWSE rate limiting on bulk requests
+    for sid in resolved_stock_ids:
         quote = fetch_latest_quote(sid)
         close_price = parse_quote_price(quote.get("close_price"))
         source = str(quote.get("source") or "unknown")
