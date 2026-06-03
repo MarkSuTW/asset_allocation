@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -151,6 +151,12 @@ class LoanCreate(BaseModel):
     due_date: Optional[str] = None
     note: str = Field(default="")
 
+    @model_validator(mode="after")
+    def pure_collateral_must_have_zero_rate(self) -> "LoanCreate":
+        if self.principal == 0 and self.interest_rate > 0:
+            raise ValueError("純擔保（借款金額=0）利率必須為 0")
+        return self
+
 
 class LoanUpdate(BaseModel):
     lender: str
@@ -161,6 +167,12 @@ class LoanUpdate(BaseModel):
     start_date: str
     due_date: Optional[str] = None
     note: str = Field(default="")
+
+    @model_validator(mode="after")
+    def pure_collateral_must_have_zero_rate(self) -> "LoanUpdate":
+        if self.principal == 0 and self.interest_rate > 0:
+            raise ValueError("純擔保（借款金額=0）利率必須為 0")
+        return self
 
 
 DEFAULT_TAX_SETTINGS = {
@@ -2188,15 +2200,16 @@ def build_missing_price_list(conn: sqlite3.Connection, limit: int = 500) -> List
             COALESCE(h.shares, 0) AS shares,
             COALESCE(h.total_cost, 0) AS total_cost,
             COALESCE(s.current_price, 0) AS current_price,
-            (
-                SELECT t.price
-                FROM transactions t
-                WHERE t.stock_id = h.stock_id
-                ORDER BY t.date DESC, t.id DESC
-                LIMIT 1
-            ) AS last_trade_price
+            ltp.price AS last_trade_price
         FROM holdings h
         LEFT JOIN stock_info s ON s.stock_id = h.stock_id
+        LEFT JOIN (
+            SELECT t.stock_id, t.price
+            FROM transactions t
+            INNER JOIN (
+                SELECT stock_id, MAX(id) AS max_id FROM transactions GROUP BY stock_id
+            ) latest ON latest.stock_id = t.stock_id AND latest.max_id = t.id
+        ) ltp ON ltp.stock_id = h.stock_id
         WHERE COALESCE(h.shares, 0) > 0
           AND COALESCE(s.current_price, 0) <= 0
         ORDER BY h.stock_id
@@ -2421,8 +2434,9 @@ def rebuild_holdings_and_realized(conn: sqlite3.Connection) -> None:
                     lots_by_stock[sid].popleft()
 
             ratio = sell_shares / shares if shares > 0 else 0.0
-            proceeds = sell_shares * price - (fees * ratio) - (transaction_tax * ratio)
-            realized = proceeds - fifo_cost
+            fifo_cost = round(fifo_cost, 6)
+            proceeds = round(sell_shares * price - (fees * ratio) - (transaction_tax * ratio), 6)
+            realized = round(proceeds - fifo_cost, 6)
 
         conn.execute("UPDATE transactions SET realized_profit = ? WHERE id = ?", (round(realized, 6), int(r["id"])))
 
@@ -2460,7 +2474,6 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
     events.sort(key=lambda e: (e["date"], 0 if e["kind"] == "stock_div" else 1, e["id"]))
     price_rows = conn.execute("SELECT stock_id, current_price FROM stock_info").fetchall()
     current_price_map = {normalize_stock_id(r["stock_id"]): float(r["current_price"] or 0.0) for r in price_rows}
-    tax_settings = get_transaction_tax_settings(conn)
 
     lots_by_stock: Dict[str, deque] = defaultdict(deque)
     realized_totals: Dict[str, float] = defaultdict(float)
@@ -2486,7 +2499,7 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
         shares = float(r["shares"])
         price = float(r["price"])
         fees = float(r["fees"])
-        transaction_tax = calculate_transaction_tax(sid, action, shares, price, tax_settings)
+        transaction_tax = float(r["transaction_tax"])  # use stored value, not recalculated
         fifo_cost = 0.0
 
         realized = 0.0
@@ -2521,8 +2534,9 @@ def build_fifo_transaction_metrics(conn: sqlite3.Connection) -> Dict[int, Dict[s
                 if lot["shares"] <= 1e-9:
                     lots_by_stock[sid].popleft()
             ratio = sell_shares / shares if shares > 0 else 0.0
-            proceeds = sell_shares * price - (fees * ratio) - (transaction_tax * ratio)
-            realized = proceeds - fifo_cost
+            fifo_cost = round(fifo_cost, 6)
+            proceeds = round(sell_shares * price - (fees * ratio) - (transaction_tax * ratio), 6)
+            realized = round(proceeds - fifo_cost, 6)
 
         rate = None
         if action == "sell" and fifo_cost > 0:
@@ -2601,21 +2615,27 @@ def portfolio_summary_data(conn: sqlite3.Connection) -> Dict[str, float]:
 
 
 def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
-    rows = conn.execute("SELECT stock_id, chinese_name, current_price FROM stock_info ORDER BY stock_id").fetchall()
+    # Only process stocks with active holdings — avoids N+1 external price fetches
+    rows = conn.execute(
+        """
+        SELECT h.stock_id, COALESCE(s.chinese_name, h.stock_id) AS chinese_name,
+               COALESCE(h.shares, 0) AS shares, COALESCE(h.total_cost, 0) AS total_cost,
+               COALESCE(s.current_price, 0) AS current_price
+        FROM holdings h
+        LEFT JOIN stock_info s ON s.stock_id = h.stock_id
+        WHERE h.shares > 0
+        ORDER BY h.stock_id
+        """
+    ).fetchall()
     items = []
 
     for row in rows:
         stock_id = row["stock_id"]
         chinese_name = row["chinese_name"] or stock_id
-        current_price = float(row["current_price"]) if row["current_price"] else 0.0
-        
-        h = conn.execute(
-            "SELECT COALESCE(shares, 0) AS shares, COALESCE(total_cost, 0) AS total_cost FROM holdings WHERE stock_id = ?",
-            (stock_id,),
-        ).fetchone()
-        shares = float(h["shares"]) if h else 0.0
-        total_cost = float(h["total_cost"]) if h else 0.0
-        if current_price <= 0 and shares > 0:
+        shares = float(row["shares"])
+        total_cost = float(row["total_cost"])
+        current_price = float(row["current_price"])
+        if current_price <= 0:
             quote = fetch_latest_quote(stock_id)
             if quote.get("close_price") is not None:
                 current_price = float(quote["close_price"])
@@ -2666,11 +2686,16 @@ def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
 
 
 def portfolio_allocation_data(conn: sqlite3.Connection) -> Dict[str, List[Dict[str, Any]]]:
+    # Only active holdings, cost fallback already included — avoids N+1 external price fetches
     rows = conn.execute(
         """
-        SELECT s.stock_id, s.asset_type, s.sector, COALESCE(h.shares,0) AS shares, COALESCE(s.current_price, 0) AS current_price
-        FROM stock_info s
-        LEFT JOIN holdings h ON h.stock_id = s.stock_id
+        SELECT s.stock_id, s.asset_type, s.sector,
+               COALESCE(h.shares, 0) AS shares,
+               COALESCE(s.current_price, 0) AS current_price,
+               COALESCE(h.total_cost, 0) AS total_cost
+        FROM holdings h
+        LEFT JOIN stock_info s ON s.stock_id = h.stock_id
+        WHERE h.shares > 0
         """
     ).fetchall()
 
@@ -2680,16 +2705,16 @@ def portfolio_allocation_data(conn: sqlite3.Connection) -> Dict[str, List[Dict[s
     for row in rows:
         stock_id = row["stock_id"]
         current_price = float(row["current_price"] or 0)
-        if current_price <= 0 and float(row["shares"]) > 0:
+        shares = float(row["shares"])
+        if current_price <= 0:
             quote = fetch_latest_quote(stock_id)
             if quote.get("close_price") is not None:
                 current_price = float(quote["close_price"])
                 upsert_stock_quote(conn, stock_id, quote.get("chinese_name"), current_price)
-        value = float(row["shares"]) * current_price
+        value = shares * current_price
         if value <= 0:
-            # 缺價時避免全為0，改採成本法
-            h = conn.execute("SELECT total_cost FROM holdings WHERE stock_id = ?", (stock_id,)).fetchone()
-            value = float(h[0]) if h else 0.0
+            # 缺價時退回成本法
+            value = float(row["total_cost"])
 
         asset_type = row["asset_type"] or "其他"
         sector = row["sector"] or "其他"
@@ -2836,14 +2861,12 @@ def loans_health_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         status = "無借款"
     else:
         maintenance_rate = (total_collateral / total_principal) * 100
-        if maintenance_rate < 130:
+        if maintenance_rate < 140:
             status = "危險"
         elif maintenance_rate < 167:
             status = "警戒"
-        elif maintenance_rate > 200:
-            status = "安全"
         else:
-            status = "注意"
+            status = "安全"
 
     return {
         "maintenance_rate": round(maintenance_rate, 2) if maintenance_rate is not None else None,
@@ -3371,7 +3394,8 @@ def repair_stock_info_api() -> Dict[str, Any]:
 
 
 @app.post("/api/dividends/auto-sync")
-def auto_sync_dividends_api(force: bool = False, years: int = 2) -> Dict[str, Any]:
+@_limiter.limit("3/minute")
+def auto_sync_dividends_api(request: Request, force: bool = False, years: int = 2) -> Dict[str, Any]:
     with get_conn() as conn:
         today = date.today().isoformat()
         last_sync_date = get_app_setting(conn, "last_dividend_auto_sync_date", "") or ""
@@ -3428,7 +3452,8 @@ def auto_sync_dividends_api(force: bool = False, years: int = 2) -> Dict[str, An
 
 
 @app.post("/api/dividends/recalc-jobs")
-def create_dividend_recalc_job_api(years: int = 2, start_year: int = 2019) -> Dict[str, Any]:
+@_limiter.limit("3/minute")
+def create_dividend_recalc_job_api(request: Request, years: int = 2, start_year: int = 2019) -> Dict[str, Any]:
     safe_years = max(1, min(int(years), 30))
     safe_start_year = max(1900, min(int(start_year), date.today().year))
 
@@ -4018,7 +4043,8 @@ def delete_transaction(tx_id: int) -> Dict[str, Any]:
 
 
 @app.get("/api/stock/{stock_id}/quote")
-def get_stock_quote(stock_id: str) -> Dict[str, Any]:
+@_limiter.limit("30/minute")
+def get_stock_quote(request: Request, stock_id: str) -> Dict[str, Any]:
     sid = normalize_stock_id(stock_id)
     if not sid:
         raise HTTPException(status_code=400, detail="stock_id is required")
@@ -4075,7 +4101,8 @@ def refresh_missing_prices_api(limit: int = 500) -> Dict[str, Any]:
 
 
 @app.post("/api/stock/refresh-prices")
-def refresh_prices_api(limit: int = 500, scope: str = "transactions", stock_ids: Optional[str] = None) -> Dict[str, Any]:
+@_limiter.limit("5/minute")
+def refresh_prices_api(request: Request, limit: int = 500, scope: str = "transactions", stock_ids: Optional[str] = None) -> Dict[str, Any]:
     explicit_stock_ids = []
     if stock_ids:
         explicit_stock_ids = [normalize_stock_id(part) for part in stock_ids.split(",") if normalize_stock_id(part)]
