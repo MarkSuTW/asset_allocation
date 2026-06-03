@@ -769,6 +769,7 @@ def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[st
         "--unit",
         _WEB_REDEPLOY_UNIT,
         "--property=Type=oneshot",
+        "--collect",
     ]
     if _WEB_REDEPLOY_RUN_AS:
         cmd.extend(["--uid", _WEB_REDEPLOY_RUN_AS])
