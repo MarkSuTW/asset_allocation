@@ -26,7 +26,7 @@ if [ "$(id -u)" -eq 0 ]; then
 	run_systemctl restart wealth-app
 else
 	run_systemctl() { sudo -n systemctl "$@"; }
-	if ! sudo -n true 2>/dev/null; then
+	if ! sudo -n systemctl --version >/dev/null 2>&1; then
 		echo "ERROR: sudo requires password. Please configure NOPASSWD for systemctl/systemd-run before using web redeploy."
 		exit 1
 	fi
