@@ -654,7 +654,7 @@
           <span class="status-pill" v-if="priceAutoRefreshActive">
             <span class="price-refresh-dot"></span>自動更新報價中
           </span>
-          <button class="btn btn-outline-info btn-sm" @click="manualRefreshPrices" :disabled="priceRefreshing" title="立即抓取所有持股最新市價">
+          <button class="btn btn-outline-info btn-sm" @click="manualRefreshPrices" :disabled="priceRefreshing || isRefreshing" title="立即抓取所有持股最新市價">
             {{ priceRefreshing ? '更新中...' : '📈 更新報價' }}
           </button>
           <button class="btn btn-outline-light" @click="refreshAll" :disabled="isRefreshing">

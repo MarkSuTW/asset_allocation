@@ -103,112 +103,130 @@ def fetch_stooq_quote(stock_id: str) -> Dict[str, Any]:
     return {"close_price": None, "chinese_name": None, "source": "stooq_unavailable"}
 
 
+def _is_taiwan_listed(sid: str) -> bool:
+    """Return True for Taiwan stock codes (3-6 digit numeric, optionally trailing letters)."""
+    base = sid.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    return base.isdigit() and 3 <= len(base) <= 6
+
+
+def _fetch_yahoo_v7(symbols: List[str]) -> tuple:
+    """Try Yahoo Finance v7 quote API. Returns (close_price, chinese_name) or (None, None)."""
+    url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" + urllib.parse.quote(",".join(symbols))
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None, None
+
+    results = payload.get("quoteResponse", {}).get("result", [])
+    if not results:
+        return None, None
+
+    best = results[0]
+    for q in results:
+        if parse_quote_price(q.get("regularMarketPrice")) is not None or parse_quote_price(q.get("regularMarketPreviousClose")) is not None:
+            best = q
+            break
+
+    price = parse_quote_price(best.get("regularMarketPrice")) or parse_quote_price(best.get("regularMarketPreviousClose"))
+    name = (best.get("shortName") or best.get("longName") or "").strip() or None
+    return price, name
+
+
+def _fetch_yahoo_v8_chart(symbols: List[str]) -> Optional[float]:
+    """Try Yahoo Finance v8 chart API. Returns close_price or None."""
+    for symbol in symbols:
+        chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?interval=1d&range=5d"
+        req = urllib.request.Request(chart_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            result = data.get("chart", {}).get("result", [])
+            if not result:
+                continue
+            closes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+            valid = [parse_quote_price(v) for v in closes if parse_quote_price(v) is not None]
+            if valid:
+                return valid[-1]
+        except Exception:
+            continue
+    return None
+
+
+def _fetch_twse_openapi(code_candidates: List[str]) -> Optional[float]:
+    """Try TWSE rwd API (recent daily data). Returns close_price or None."""
+    for code in code_candidates:
+        url = (
+            "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
+            f"?stockNo={urllib.parse.quote(code)}&response=json"
+        )
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=6, context=ssl._create_unverified_context()) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+            rows = payload.get("data", [])
+            if rows:
+                prices = [parse_quote_price(r[6]) for r in rows if len(r) > 6]
+                prices = [p for p in prices if p is not None]
+                if prices:
+                    return prices[-1]
+        except Exception:
+            continue
+    return None
+
+
 def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
     sid = normalize_stock_id(stock_id)
     if not sid:
         return {"stock_id": sid, "chinese_name": None, "close_price": None, "source": "invalid_stock_id"}
 
     base_sid = sid.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ") or sid
-    symbol_candidates = [sid]
-    if base_sid != sid:
-        symbol_candidates.append(base_sid)
+    code_candidates = list(dict.fromkeys([sid, base_sid]))  # deduplicated
     symbols = get_yahoo_symbol_candidates(sid)
 
-    url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" + urllib.parse.quote(",".join(symbols))
-
-    req = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept": "application/json",
-        },
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-        payload = {"quoteResponse": {"result": []}}
-
-    results = payload.get("quoteResponse", {}).get("result", [])
-    close_price = None
-    chinese_name = None
+    close_price: Optional[float] = None
+    chinese_name: Optional[str] = None
     source = "quote_unavailable"
 
-    if results:
-        best = results[0]
-        for q in results:
-            prev_close = parse_quote_price(q.get("regularMarketPreviousClose"))
-            market_price = parse_quote_price(q.get("regularMarketPrice"))
-            if prev_close is not None or market_price is not None:
-                best = q
-                break
+    is_tw = _is_taiwan_listed(sid)
 
-        close_price = parse_quote_price(best.get("regularMarketPrice"))
-        if close_price is None:
-            close_price = parse_quote_price(best.get("regularMarketPreviousClose"))
-        chinese_name = (best.get("shortName") or best.get("longName") or "").strip() or None
-        if close_price is not None:
-            source = "yahoo_quote"
-
-    if close_price is None:
+    # --- Taiwan stocks: TWSE MIS realtime FIRST (most accurate intraday) ---
+    if is_tw:
         twse_rt = fetch_twse_realtime_quote(sid)
         if twse_rt.get("close_price") is not None:
             close_price = float(twse_rt["close_price"])
-            if not chinese_name:
-                chinese_name = twse_rt.get("chinese_name")
+            chinese_name = twse_rt.get("chinese_name")
             source = str(twse_rt.get("source") or "twse_realtime")
 
+    # --- Yahoo Finance v7 (may 401, try anyway; useful for non-TW stocks) ---
     if close_price is None:
-        for symbol in symbols:
-            chart_url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?interval=1d&range=1mo"
-            chart_req = urllib.request.Request(chart_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-            try:
-                with urllib.request.urlopen(chart_req, timeout=8) as resp:
-                    chart_payload = json.loads(resp.read().decode("utf-8"))
-                chart_result = chart_payload.get("chart", {}).get("result", [])
-                if not chart_result:
-                    continue
-                closes = chart_result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-                valid = [parse_quote_price(v) for v in closes]
-                valid = [v for v in valid if v is not None]
-                if valid:
-                    close_price = valid[-1]
-                    source = "yahoo_chart"
-                    break
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, TypeError):
-                continue
+        yp, yn = _fetch_yahoo_v7(symbols)
+        if yp is not None:
+            close_price = float(yp)
+            chinese_name = chinese_name or yn
+            source = "yahoo_quote"
 
+    # --- Yahoo Finance v8 chart (historical fallback) ---
     if close_price is None:
-        for code in symbol_candidates:
-            twse_url = (
-                "https://www.twse.com.tw/exchangeReport/STOCK_DAY?response=json"
-                f"&date={date.today().strftime('%Y%m%d')}&stockNo={urllib.parse.quote(code)}"
-            )
-            twse_req = urllib.request.Request(twse_url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
-            try:
-                with urllib.request.urlopen(twse_req, timeout=8, context=ssl._create_unverified_context()) as resp:
-                    twse_payload = json.loads(resp.read().decode("utf-8"))
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError, IndexError, TypeError, ssl.SSLError, OSError):
-                continue
-            try:
-                data = twse_payload.get("data", [])
-                if data:
-                    closes = [parse_quote_price(row[6] if len(row) > 6 else None) for row in data]
-                    closes = [v for v in closes if v is not None]
-                    if closes:
-                        close_price = closes[-1]
-                        source = "twse_openapi"
-                        break
-            except (KeyError, IndexError, TypeError):
-                continue
+        yp8 = _fetch_yahoo_v8_chart(symbols)
+        if yp8 is not None:
+            close_price = float(yp8)
+            source = "yahoo_chart"
 
+    # --- TWSE rwd daily data (after-hours fallback for TW stocks) ---
+    if close_price is None and is_tw:
+        twse_p = _fetch_twse_openapi(code_candidates)
+        if twse_p is not None:
+            close_price = float(twse_p)
+            source = "twse_openapi"
+
+    # --- Stooq CSV (last resort) ---
     if close_price is None:
         stooq = fetch_stooq_quote(sid)
         if stooq.get("close_price") is not None:
             close_price = float(stooq["close_price"])
-            if not chinese_name:
-                chinese_name = stooq.get("chinese_name")
+            chinese_name = chinese_name or stooq.get("chinese_name")
             source = str(stooq.get("source") or "stooq_csv")
 
     if not chinese_name:

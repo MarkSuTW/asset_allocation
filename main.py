@@ -1457,7 +1457,7 @@ def refresh_missing_prices_api(limit: int = 500) -> Dict[str, Any]:
 
 
 @app.post("/api/stock/refresh-prices")
-@_limiter.limit("5/minute")
+@_limiter.limit("20/minute")
 def refresh_prices_api(request: Request, limit: int = 500, scope: str = "transactions", stock_ids: Optional[str] = None) -> Dict[str, Any]:
     explicit_stock_ids = []
     if stock_ids:
