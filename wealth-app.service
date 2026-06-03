@@ -1,0 +1,28 @@
+[Unit]
+Description=Wealth Asset Allocation Dashboard
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Change "ubuntu" to your actual Linux username if different
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/asset_allocation
+EnvironmentFile=/opt/asset_allocation/.env
+ExecStart=/opt/asset_allocation/.venv/bin/uvicorn main:app \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers 1 \
+    --log-level info \
+    --access-log
+Restart=on-failure
+RestartSec=10
+# Allow access to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wealth-app
+
+[Install]
+WantedBy=multi-user.target

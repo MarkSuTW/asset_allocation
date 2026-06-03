@@ -158,7 +158,7 @@ def get_conn(auto_repair: bool = True) -> sqlite3.Connection:
     global _AUTO_STOCK_INFO_REPAIR_DONE, _RUNTIME_SCHEMA_READY
     if not DB_PATH.exists():
         raise HTTPException(status_code=500, detail="Database wealth.db not found. Run init_db.py first.")
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=15)  # 15s wait on write-lock before raising OperationalError
     conn.row_factory = sqlite3.Row
     # Call the implementation but patch its module-level flag through our local flag
     import app.core.database as _db_mod
@@ -209,10 +209,14 @@ def _price_refresh_worker() -> None:
 
 @app.on_event("startup")
 def _startup_init() -> None:
-    """Pre-warm DB schema, start background price scheduler."""
+    """Pre-warm DB schema, enable WAL mode, start background price scheduler."""
     if DB_PATH.exists():
         with get_conn() as conn:
-            conn  # get_conn() already calls ensure_runtime_schema + auto_repair
+            # WAL mode: multiple readers + 1 writer concurrently; persists across connections
+            conn.execute("PRAGMA journal_mode=WAL")
+            # Larger page cache improves read performance for concurrent users
+            conn.execute("PRAGMA cache_size=-8000")  # ~8 MB
+            conn.commit()
 
     _PRICE_REFRESH_STOP.clear()
     t = threading.Thread(target=_price_refresh_worker, daemon=True, name="price-scheduler")

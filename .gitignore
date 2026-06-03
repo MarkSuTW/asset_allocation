@@ -9,6 +9,11 @@ backups/
 # Environment files
 .env
 
+# Service-account credential files — NEVER commit these
+*_key.json
+*_credentials.json
+*-service-account*.json
+
 # OS/editor noise
 .DS_Store
 Thumbs.db

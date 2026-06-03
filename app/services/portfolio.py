@@ -425,13 +425,15 @@ def portfolio_summary_data(conn: sqlite3.Connection) -> Dict[str, float]:
 def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
     rows = conn.execute(
         """
-        SELECT h.stock_id, COALESCE(s.chinese_name, h.stock_id) AS chinese_name,
-               COALESCE(h.shares, 0) AS shares, COALESCE(h.total_cost, 0) AS total_cost,
+        SELECT t.stock_id,
+               COALESCE(s.chinese_name, t.stock_id) AS chinese_name,
+               COALESCE(h.shares, 0) AS shares,
+               COALESCE(h.total_cost, 0) AS total_cost,
                COALESCE(s.current_price, 0) AS current_price
-        FROM holdings h
-        LEFT JOIN stock_info s ON s.stock_id = h.stock_id
-        WHERE h.shares > 0
-        ORDER BY h.stock_id
+        FROM (SELECT DISTINCT stock_id FROM transactions) t
+        LEFT JOIN holdings h ON h.stock_id = t.stock_id
+        LEFT JOIN stock_info s ON s.stock_id = t.stock_id
+        ORDER BY t.stock_id
         """
     ).fetchall()
     items = []
@@ -442,7 +444,7 @@ def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
         shares = float(row["shares"])
         total_cost = float(row["total_cost"])
         current_price = float(row["current_price"])
-        if current_price <= 0:
+        if shares > 0 and current_price <= 0:
             quote = fetch_latest_quote(stock_id)
             if quote.get("close_price") is not None:
                 current_price = float(quote["close_price"])

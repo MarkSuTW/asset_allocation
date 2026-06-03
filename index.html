@@ -631,6 +631,233 @@
         .modal-dialog { margin: 0.5rem; }
         .modal-dialog.modal-lg { max-width: 100%; }
       }
+
+      /* ── App Header ─────────────────────────────────── */
+      .app-header {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.8rem 1.1rem;
+        margin-bottom: 1.25rem;
+        background: rgba(10, 18, 38, 0.65);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        gap: 0.75rem;
+        backdrop-filter: blur(12px);
+      }
+
+      .app-title-block h3 {
+        font-size: 1.18rem;
+        font-weight: 700;
+        letter-spacing: -0.2px;
+        background: linear-gradient(110deg, var(--accent-a) 0%, var(--accent-b) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      .app-title-block .app-subtitle {
+        font-size: 0.72rem;
+        color: var(--text-dim);
+        margin-top: 2px;
+        letter-spacing: 0.03em;
+      }
+
+      .header-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      /* ── Pill Nav ────────────────────────────────────── */
+      .nav-pills-wrap {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        gap: 3px;
+        padding: 5px;
+        background: rgba(5, 8, 15, 0.55);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        margin-bottom: 1.25rem;
+        scrollbar-width: none;
+      }
+
+      .nav-pills-wrap::-webkit-scrollbar { display: none; }
+
+      .nav-pill-btn {
+        flex: 0 0 auto;
+        background: transparent;
+        border: 1px solid transparent;
+        color: var(--text-dim);
+        padding: 0.38rem 1rem;
+        border-radius: 10px;
+        font-size: 0.88rem;
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        font-family: inherit;
+      }
+
+      .nav-pill-btn:hover {
+        color: var(--text-main);
+        background: rgba(255, 255, 255, 0.06);
+        border-color: var(--line);
+      }
+
+      .nav-pill-btn.active {
+        background: linear-gradient(120deg, rgba(0, 208, 255, 0.2), rgba(79, 125, 255, 0.28));
+        border-color: rgba(79, 125, 255, 0.55);
+        color: #e4f3ff;
+        box-shadow: 0 0 16px rgba(79, 125, 255, 0.2), inset 0 1px 0 rgba(255,255,255,0.06);
+        font-weight: 500;
+      }
+
+      /* ── KPI Card Enhancements ───────────────────────── */
+      .kpi-card { position: relative; overflow: hidden; }
+
+      .kpi-stripe {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 3px;
+        border-radius: 16px 16px 0 0;
+      }
+
+      .kpi-stripe-cyan  { background: linear-gradient(90deg, #00d0ff 0%, #4f7dff 100%); }
+      .kpi-stripe-green { background: linear-gradient(90deg, #1fd18a 0%, #00d0ff 100%); }
+      .kpi-stripe-lime  { background: linear-gradient(90deg, #a8e063 0%, #1fd18a 100%); }
+      .kpi-stripe-amber { background: linear-gradient(90deg, #ffc857 0%, #ff9800 100%); }
+      .kpi-stripe-red   { background: linear-gradient(90deg, #ff6b6b 0%, #ff4444 100%); }
+      .kpi-stripe-purple{ background: linear-gradient(90deg, #9c6fff 0%, #4f7dff 100%); }
+      .kpi-stripe-dim   { background: var(--line); }
+
+      .kpi-icon {
+        position: absolute;
+        top: 0.75rem; right: 0.85rem;
+        font-size: 1.15rem;
+        opacity: 0.25;
+        pointer-events: none;
+      }
+
+      .kpi-positive { color: var(--ok) !important; text-shadow: 0 0 14px rgba(31,209,138,0.3); }
+      .kpi-negative { color: var(--danger) !important; text-shadow: 0 0 14px rgba(255,107,107,0.3); }
+      .kpi-accent   { color: var(--accent-a) !important; }
+
+      /* ── Section Divider ─────────────────────────────── */
+      .section-divider {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        margin-bottom: 0.85rem;
+        margin-top: 0.25rem;
+      }
+
+      .section-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(90deg, var(--line) 0%, transparent 100%);
+      }
+
+      /* ── Summary Strip ───────────────────────────────── */
+      .summary-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+        padding: 0.6rem 0.8rem;
+        background: rgba(0, 0, 0, 0.22);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        margin-bottom: 0.8rem;
+      }
+
+      .sum-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.18rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.77rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(143,160,187,0.18);
+        white-space: nowrap;
+      }
+
+      .sum-pill .sp-label { color: var(--text-dim); }
+      .sum-pill .sp-value { color: var(--text-main); font-weight: 500; }
+      .sum-pill .sp-value.pos { color: var(--ok); }
+      .sum-pill .sp-value.neg { color: var(--danger); }
+
+      /* ── Table Shell ─────────────────────────────────── */
+      .table-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 0.85rem;
+        flex-wrap: wrap;
+      }
+
+      .table-title {
+        font-size: 0.98rem;
+        font-weight: 600;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        color: var(--text-main);
+      }
+
+      .table-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn-csv {
+        border: 1px solid rgba(143,160,187,0.3);
+        color: var(--text-dim);
+        background: rgba(255,255,255,0.04);
+        font-size: 0.78rem;
+        padding: 0.28rem 0.65rem;
+        border-radius: 8px;
+        transition: all 0.18s;
+      }
+
+      .btn-csv:hover {
+        color: var(--text-main);
+        border-color: rgba(0,208,255,0.4);
+        background: rgba(0,208,255,0.08);
+      }
+
+      /* ── Chart section ───────────────────────────────── */
+      .chart-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 0.5rem;
+      }
+
+      @media (max-width: 640px) {
+        .app-header { padding: 0.65rem 0.8rem; }
+        .app-title-block h3 { font-size: 1rem; }
+        .nav-pill-btn { padding: 0.32rem 0.75rem; font-size: 0.82rem; }
+        .kpi-card .value { font-size: 1.2rem; }
+      }
     </style>
   </head>
   <body>
@@ -643,140 +870,134 @@
         </div>
       </div>
 
-      <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-        <h3 class="mb-0">有價證券資產儀表板</h3>
-        <div class="d-flex flex-wrap gap-2 align-items-center">
+      <div class="app-header">
+        <div class="app-title-block">
+          <h3>有價證券資產儀表板</h3>
+          <div class="app-subtitle">Securities Portfolio Dashboard</div>
+        </div>
+        <div class="header-controls">
           <span class="status-pill">
             <span :class="['status-dot', (isRefreshing || backgroundRefreshInProgress) ? 'busy' : '']"></span>
             {{ (isRefreshing || backgroundRefreshInProgress) ? '同步中' : '系統就緒' }}
           </span>
-          <span class="status-pill" v-if="lastRefreshAt">最後更新 {{ lastRefreshAt }}</span>
+          <span class="status-pill" v-if="lastRefreshAt">⏱ {{ lastRefreshAt }}</span>
           <span class="status-pill" v-if="priceAutoRefreshActive">
             <span class="price-refresh-dot"></span>自動更新報價中
           </span>
-          <button class="btn btn-outline-info btn-sm" @click="manualRefreshPrices" :disabled="priceRefreshing || isRefreshing || backgroundRefreshInProgress || dividendSyncLoading" title="立即抓取所有持股最新市價（同步中請等待）">
+          <button class="btn btn-outline-info btn-sm" @click="manualRefreshPrices"
+            :disabled="priceRefreshing || isRefreshing || backgroundRefreshInProgress || dividendSyncLoading"
+            title="立即抓取所有持股最新市價">
             {{ priceRefreshing ? '更新中...' : '📈 更新報價' }}
           </button>
-          <button class="btn btn-outline-light" @click="refreshAll" :disabled="isRefreshing">
-            {{ isRefreshing ? '更新中...' : '重新整理' }}
+          <button class="btn btn-outline-light btn-sm" @click="refreshAll" :disabled="isRefreshing">
+            {{ isRefreshing ? '更新中...' : '↺ 重新整理' }}
           </button>
         </div>
       </div>
 
-      <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: currentPage === 'overview' }"
-            @click="currentPage = 'overview'"
-          >
-            彙整
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: currentPage === 'transactions' }"
-            @click="currentPage = 'transactions'"
-          >
-            交易明細
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: currentPage === 'loans' }"
-            @click="currentPage = 'loans'"
-          >
-            借貸明細
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: currentPage === 'dividends' }"
-            @click="currentPage = 'dividends'"
-          >
-            股利明細
-          </button>
-        </li>
-        <li class="nav-item" role="presentation">
-          <button
-            class="nav-link"
-            :class="{ active: currentPage === 'settings' }"
-            @click="currentPage = 'settings'"
-          >
-            參數設定
-          </button>
-        </li>
-      </ul>
+      <div class="nav-pills-wrap" role="tablist">
+        <button class="nav-pill-btn" :class="{ active: currentPage === 'overview' }"   @click="currentPage = 'overview'">📊 彙整</button>
+        <button class="nav-pill-btn" :class="{ active: currentPage === 'transactions' }" @click="currentPage = 'transactions'">📋 交易明細</button>
+        <button class="nav-pill-btn" :class="{ active: currentPage === 'loans' }"      @click="currentPage = 'loans'">🏦 借貸明細</button>
+        <button class="nav-pill-btn" :class="{ active: currentPage === 'dividends' }"  @click="currentPage = 'dividends'">💰 股利明細</button>
+        <button class="nav-pill-btn" :class="{ active: currentPage === 'settings' }"   @click="currentPage = 'settings'">⚙️ 參數設定</button>
+      </div>
 
       <!-- 彙整頁面 -->
       <div v-show="currentPage === 'overview'">
+        <div class="section-divider">資產概況</div>
         <div class="row g-3 mb-3">
+
+          <!-- 庫存總市值 -->
           <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.05s">
+            <div class="kpi-stripe kpi-stripe-cyan"></div>
+            <div class="kpi-icon">📦</div>
             <div class="label">庫存總市值</div>
-            <div class="value">{{ fmt(overviewNetWorth) }}</div>
+            <div class="value kpi-accent">{{ fmt(overviewNetWorth) }}</div>
+            <div class="kpi-note">目前持股市場總值</div>
           </div>
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.12s">
-            <div class="label">總預估股息</div>
-            <div class="value">{{ fmt(expected.total_expected_dividend) }}</div>
-            <div class="kpi-note">
-              今年排程 {{ fmt(expectedBreakdown.current_year_schedule_total) }} / 殖利率估算 {{ fmt(expectedBreakdown.yield_estimate_total) }}
+
+          <!-- 累計淨損益（含未實現） -->
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.10s">
+            <div class="kpi-stripe kpi-stripe-green"></div>
+            <div class="kpi-icon">🏆</div>
+            <div class="label" title="已實現淨利 + 已領股息 + 未實現損益；所有費用已內含。">累計淨損益（含未實現）</div>
+            <div class="value" :class="performanceTotals.total_profit_including_dividends >= 0 ? 'kpi-positive' : 'kpi-negative'">
+              {{ fmt(performanceTotals.total_profit_including_dividends) }}
+            </div>
+            <div class="kpi-note">= 已實現 + 股息 + 未實現，全成本已扣</div>
+          </div>
+
+          <!-- 已實現損益（合併卡：含股息 + 交易明細） -->
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.15s">
+            <div class="kpi-stripe kpi-stripe-lime"></div>
+            <div class="kpi-icon">✅</div>
+            <div class="label" title="已實現交易淨利 + 已領股息；不含未實現浮動損益。">已實現損益</div>
+            <div class="value" :class="performanceTotals.realized_with_dividends >= 0 ? 'kpi-positive' : 'kpi-negative'">
+              {{ fmt(performanceTotals.realized_with_dividends) }}
+            </div>
+            <div class="kpi-note" style="margin-top:0.4rem; display:flex; flex-direction:column; gap:2px;">
+              <span>交易 <span :class="performanceTotals.realized_profit >= 0 ? 'kpi-positive' : 'kpi-negative'" style="font-size:0.82rem">{{ fmt(performanceTotals.realized_profit) }}</span></span>
+              <span>股息 <span style="color:var(--accent-a);font-size:0.82rem">{{ fmt(performanceTotals.dividends_received) }}</span></span>
             </div>
           </div>
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.19s">
-            <div class="label" title="交易已實現淨利，已扣除手續費與交易稅，不含股息。">總已實現淨利 (交易，已扣費稅)</div>
-            <div class="value">{{ fmt(performanceTotals.realized_profit) }}</div>
-            <div class="kpi-note">不含股息，已扣手續費與交易稅</div>
+
+          <!-- 預估股息（本年度） -->
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.20s">
+            <div class="kpi-stripe kpi-stripe-amber"></div>
+            <div class="kpi-icon">💰</div>
+            <div class="label">預估股息（本年度）</div>
+            <div class="value kpi-accent">{{ fmt(expected.total_expected_dividend) }}</div>
+            <div class="kpi-note">
+              排程 {{ fmt(expectedBreakdown.current_year_schedule_total) }} ／ 估算 {{ fmt(expectedBreakdown.yield_estimate_total) }}
+            </div>
           </div>
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.26s">
-            <div class="label" title="已實現交易淨利加上已領股息；交易手續費與交易稅已計入。">總已實現淨利 (含股息，已扣費稅)</div>
-            <div class="value">{{ fmt(performanceTotals.realized_with_dividends) }}</div>
-            <div class="kpi-note">= 已實現交易損益 + 已領股息，交易成本已內含</div>
-          </div>
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.33s">
-            <div class="label">目前維持率</div>
-            <div class="value" :class="maintainClass">{{ maintenanceLabel }}</div>
-          </div>
-          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.4s">
+
+          <!-- 應繳利息 + 維持率 sub-line -->
+          <div class="col-6 col-xl kpi-card glass" style="animation-delay: 0.25s">
+            <div class="kpi-stripe kpi-stripe-red"></div>
+            <div class="kpi-icon">🔔</div>
             <div class="label">應繳利息</div>
             <div class="value danger-text">{{ fmt(loans.total_accrued_interest) }}</div>
+            <div class="kpi-note" style="margin-top:0.4rem; display:flex; flex-direction:column; gap:2px;">
+              <span>所有借款累計應付利息</span>
+              <span>維持率 <span :class="maintainClass" style="font-size:0.82rem">{{ maintenanceLabel }}</span></span>
+            </div>
           </div>
+
         </div>
 
+        <div class="section-divider">資產分佈</div>
         <div class="row g-3 mb-3">
-          <div class="col-lg-4">
+          <div class="col-lg-6">
             <div class="glass chart-wrap">
               <div class="chart-title">資產種類佔比</div>
               <canvas id="assetTypeChart"></canvas>
             </div>
           </div>
-          <div class="col-lg-4">
+          <div class="col-lg-6">
             <div class="glass chart-wrap">
               <div class="chart-title">產業板塊佔比</div>
               <canvas id="sectorChart"></canvas>
             </div>
           </div>
-          <div class="col-lg-4">
-            <div class="glass chart-wrap">
-              <div class="chart-title">維持率 Gauge</div>
-              <canvas id="gaugeChart"></canvas>
-            </div>
-          </div>
         </div>
 
+        <div class="section-divider">標的明細</div>
         <div class="row g-3">
           <div class="col-12">
             <div class="glass table-shell">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">標的明細</h5>
-                <div class="d-flex align-items-center gap-2">
+              <div class="table-toolbar">
+                <div class="table-title">
+                  標的明細
                   <span class="badge rounded-pill badge-soft">{{ filteredPerformanceItems.length }} 檔</span>
-                  <label class="form-check-label small" style="color: var(--text-dim)">
-                    <input class="form-check-input me-1" type="checkbox" v-model="overviewFilter.only_active_holdings" />
+                </div>
+                <div class="table-actions">
+                  <label class="form-check-label small d-flex align-items-center gap-1" style="color: var(--text-dim); cursor: pointer">
+                    <input class="form-check-input" type="checkbox" v-model="overviewFilter.only_active_holdings" />
                     只看目前有庫存
                   </label>
+                  <button class="btn-csv" @click="exportPerformanceCsv" title="匯出 CSV">↓ CSV</button>
                 </div>
               </div>
               <div class="table-scroll">
@@ -833,22 +1054,21 @@
         <div class="row g-3">
           <div class="col-12">
             <div class="glass table-shell">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">所有交易紀錄</h5>
-                <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
-                  <span class="badge rounded-pill badge-soft">{{ allTransactions.items.length }} 筆</span>
-                  <button class="btn btn-sm btn-neon" @click="refreshTransactionPrices('filtered')">
-                    只更新目前篩選代號
-                  </button>
-                  <button class="btn btn-sm btn-outline-info" @click="refreshTransactionPrices('all')">
-                    更新全部交易代號
-                  </button>
+              <div class="table-toolbar">
+                <div class="table-title">
+                  📋 交易紀錄
+                  <span class="badge rounded-pill badge-soft">共 {{ allTransactions.items.length }} 筆</span>
+                </div>
+                <div class="table-actions">
+                  <button class="btn-csv" @click="exportTransactionsCsv" title="匯出篩選結果為 CSV">↓ CSV</button>
+                  <button class="btn btn-sm btn-neon" @click="refreshTransactionPrices('filtered')" title="更新目前篩選代號的市價">↺ 篩選代號</button>
+                  <button class="btn btn-sm btn-outline-info" @click="refreshTransactionPrices('all')" title="更新所有交易代號的市價">↺ 全部代號</button>
                 </div>
               </div>
-              <div class="small mb-2" style="color: var(--text-dim)">
-                以上兩個按鈕只會更新交易標的的最新市價（用於未實現損益與報酬率計算），不會改動交易紀錄本身。
+              <div class="small mb-3" style="color: var(--text-dim); font-size: 0.76rem">
+                市價更新只影響未實現損益與報酬率的計算，不會修改交易紀錄。
               </div>
-              
+
               <div class="filter-row">
                 <div class="filter-group">
                   <label>股票代號</label>
@@ -868,20 +1088,20 @@
                   <input v-model="txFilter.date_to" type="date" class="form-control" />
                 </div>
                 <div class="filter-group">
-                  <button class="btn btn-sm btn-neon" @click="openAddTxModal">新增交易明細</button>
+                  <button class="btn btn-sm btn-neon" @click="openAddTxModal">＋ 新增</button>
                   <button class="btn btn-sm btn-neon" @click="applyTxFilter">篩選</button>
                   <button class="btn btn-sm btn-outline-light" @click="clearTxFilter">清除</button>
                 </div>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 mb-2">
-                <span class="badge rounded-pill badge-soft">篩選筆數 {{ filteredTransactions.length }}</span>
-                <span class="badge rounded-pill badge-soft">總手續費 {{ fmt(txSummary.totalFees) }}</span>
-                <span class="badge rounded-pill badge-soft">總交易稅 {{ fmt(txSummary.totalTax) }}</span>
-                <span class="badge rounded-pill badge-soft">實現損益總計 {{ fmt(txSummary.totalRealized) }}</span>
-                <span class="badge rounded-pill badge-soft">未實現損益總計 {{ fmt(txSummary.totalUnrealized) }}</span>
-                <span class="badge rounded-pill badge-soft">目前庫存股數 {{ txSummary.endingInventory.toLocaleString() }}</span>
-                <span class="badge rounded-pill badge-soft">{{ txMarketReference.label }}</span>
+              <div class="summary-strip">
+                <div class="sum-pill"><span class="sp-label">篩選筆數</span><span class="sp-value">{{ filteredTransactions.length }}</span></div>
+                <div class="sum-pill"><span class="sp-label">手續費</span><span class="sp-value">{{ fmt(txSummary.totalFees) }}</span></div>
+                <div class="sum-pill"><span class="sp-label">交易稅</span><span class="sp-value">{{ fmt(txSummary.totalTax) }}</span></div>
+                <div class="sum-pill"><span class="sp-label">已實現</span><span class="sp-value" :class="txSummary.totalRealized >= 0 ? 'pos' : 'neg'">{{ fmt(txSummary.totalRealized) }}</span></div>
+                <div class="sum-pill"><span class="sp-label">未實現</span><span class="sp-value" :class="txSummary.totalUnrealized >= 0 ? 'pos' : 'neg'">{{ fmt(txSummary.totalUnrealized) }}</span></div>
+                <div class="sum-pill"><span class="sp-label">庫存股數</span><span class="sp-value">{{ txSummary.endingInventory.toLocaleString() }}</span></div>
+                <div class="sum-pill"><span class="sp-value">{{ txMarketReference.label }}</span></div>
               </div>
 
               <div class="table-scroll">
@@ -1265,12 +1485,14 @@
         <div class="row g-3">
           <div class="col-12">
             <div class="glass table-shell">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">現金股利明細</h5>
-                <div class="d-flex align-items-center gap-2">
+              <div class="table-toolbar">
+                <div class="table-title">
+                  💰 現金股利明細
                   <span class="badge rounded-pill badge-soft">{{ filteredDividends.length }} 筆</span>
+                </div>
+                <div class="table-actions">
                   <button class="btn btn-sm btn-outline-info" @click="refreshDividendSync" :disabled="dividendSyncLoading">
-                    {{ dividendSyncLoading ? '重抓中...' : '重新抓取並重算' }}
+                    {{ dividendSyncLoading ? '重抓中...' : '↺ 重新抓取並重算' }}
                   </button>
                 </div>
               </div>
@@ -1364,14 +1586,16 @@
 
           <div class="col-12">
             <div class="glass table-shell">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <h5 class="mb-0">股票股利明細</h5>
-                <span class="badge rounded-pill badge-soft">{{ filteredStockDividends.length }} 筆</span>
+              <div class="table-toolbar">
+                <div class="table-title">
+                  🎁 股票股利明細
+                  <span class="badge rounded-pill badge-soft">{{ filteredStockDividends.length }} 筆</span>
+                </div>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 mb-2">
-                <span class="badge rounded-pill badge-soft">篩選配股總計 {{ filteredStockDividendSummary.totalBonus.toLocaleString() }}</span>
-                <span class="badge rounded-pill badge-soft">篩選基準股數 {{ filteredStockDividendSummary.totalBaseShares.toLocaleString() }}</span>
+              <div class="summary-strip">
+                <div class="sum-pill"><span class="sp-label">配股總計</span><span class="sp-value">{{ filteredStockDividendSummary.totalBonus.toLocaleString() }}</span></div>
+                <div class="sum-pill"><span class="sp-label">基準股數</span><span class="sp-value">{{ filteredStockDividendSummary.totalBaseShares.toLocaleString() }}</span></div>
               </div>
 
               <div class="table-scroll">
@@ -1427,38 +1651,35 @@
         <div class="row g-3">
           <div class="col-12">
             <div class="glass table-shell">
-              <div class="d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center gap-2">
-                  <h5 class="mb-0">借貸明細</h5>
+              <div class="table-toolbar">
+                <div class="table-title">
+                  🏦 借貸明細
                   <span class="badge rounded-pill badge-soft">{{ loansList.items.length }} 筆</span>
                 </div>
-                <button class="btn btn-sm btn-neon" @click="openAddLoan">＋ 新增借款</button>
+                <div class="table-actions">
+                  <button class="btn-csv" @click="exportLoansCsv" title="匯出篩選結果為 CSV">↓ CSV</button>
+                  <button class="btn btn-sm btn-neon" @click="openAddLoan">＋ 新增借款</button>
+                </div>
               </div>
 
               <div class="filter-row">
                 <div class="filter-group">
-                  <label>借款機構</label>
-                  <input v-model.trim="loanFilter.lender" type="text" class="form-control" placeholder="元大證金" />
+                  <label>擔保品</label>
+                  <select v-model="loanFilter.collateral" class="form-select stock-filter-select">
+                    <option value="">全部</option>
+                    <option v-for="c in loanCollateralOptions" :key="c.code" :value="c.code">{{ c.code }}{{ c.name ? ' ' + c.name : '' }}</option>
+                  </select>
                 </div>
                 <div class="filter-group">
-                  <label>開始日期</label>
-                  <input v-model="loanFilter.date_from" type="date" class="form-control" />
-                </div>
-                <div class="filter-group">
-                  <label>結束日期</label>
-                  <input v-model="loanFilter.date_to" type="date" class="form-control" />
-                </div>
-                <div class="filter-group">
-                  <button class="btn btn-sm btn-neon" @click="applyLoanFilter">篩選</button>
                   <button class="btn btn-sm btn-outline-light" @click="clearLoanFilter">清除</button>
                 </div>
               </div>
 
-              <div class="d-flex gap-3 mb-2" style="font-size:0.78rem; color: var(--text-dim)">
-                <span><span style="display:inline-block;width:10px;height:10px;background:#ff4d4f;border-radius:2px;margin-right:4px"></span>逾期</span>
-                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,107,107,0.35);border-radius:2px;margin-right:4px"></span>30天內到期</span>
-                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,160,0,0.3);border-radius:2px;margin-right:4px"></span>60天內到期</span>
-                <span><span style="display:inline-block;width:10px;height:10px;background:rgba(255,214,0,0.2);border-radius:2px;margin-right:4px"></span>90天內到期</span>
+              <div class="summary-strip" style="margin-bottom: 0.6rem">
+                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:#ff4d4f;border-radius:2px;margin-right:3px"></span><span class="sp-label">逾期</span></div>
+                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,107,107,0.6);border-radius:2px;margin-right:3px"></span><span class="sp-label">30天內到期</span></div>
+                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,160,0,0.7);border-radius:2px;margin-right:3px"></span><span class="sp-label">60天內到期</span></div>
+                <div class="sum-pill"><span style="display:inline-block;width:9px;height:9px;background:rgba(255,214,0,0.8);border-radius:2px;margin-right:3px"></span><span class="sp-label">90天內到期</span></div>
               </div>
 
               <div class="table-scroll">
@@ -1471,7 +1692,7 @@
                       <th class="sortable-th" @click="toggleLoanSort('principal')" title="點擊排序">借款本金 {{ loanSortIcon('principal') }}</th>
                       <th class="sortable-th hide-mobile" @click="toggleLoanSort('interest_rate')" title="點擊排序">利率 {{ loanSortIcon('interest_rate') }}</th>
                       <th class="sortable-th hide-mobile" @click="toggleLoanSort('start_date')" title="點擊排序">起息日 {{ loanSortIcon('start_date') }}</th>
-                      <th class="sortable-th" @click="toggleLoanSort('due_date')" title="點擊排序">到期日 {{ loanSortIcon('due_date') }}</th>
+                      <th class="sortable-th" @click="toggleLoanSort('due_date')" title="點擊排序">最後償還日 {{ loanSortIcon('due_date') }}</th>
                       <th class="sortable-th hide-mobile" @click="toggleLoanSort('accrued_interest')" title="點擊排序">應繳利息 {{ loanSortIcon('accrued_interest') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('maintenance_rate')" title="點擊排序">維持率 {{ loanSortIcon('maintenance_rate') }}</th>
                       <th class="sortable-th" @click="toggleLoanSort('net_proceeds')" title="點擊排序">實拿金額 {{ loanSortIcon('net_proceeds') }}</th>
@@ -1493,10 +1714,10 @@
                       <td class="hide-mobile">{{ loan.principal > 0 ? (loan.interest_rate * 100).toFixed(2) + '%' : '—' }}</td>
                       <td class="hide-mobile">{{ loan.start_date }}</td>
                       <td>
-                        <div v-if="loan.due_date">{{ loan.due_date }}</div>
-                        <div v-if="loan.days_to_due !== null && loan.days_to_due !== undefined" style="font-size:0.8em;margin-top:1px">
-                          <span v-if="loan.days_to_due < 0" style="color:var(--danger);font-weight:600">已逾期 {{ Math.abs(loan.days_to_due) }} 天</span>
-                          <span v-else style="color:var(--text-dim)">剩 {{ loan.days_to_due }} 天</span>
+                        <div v-if="loan.due_date">{{ lastRepayDate(loan.due_date) }}</div>
+                        <div v-if="loan.due_date && loan.days_to_due !== null && loan.days_to_due !== undefined" style="font-size:0.8em;margin-top:1px">
+                          <span v-if="loan.days_to_due - 1 < 0" style="color:var(--danger);font-weight:600">已逾期 {{ Math.abs(loan.days_to_due - 1) }} 天</span>
+                          <span v-else style="color:var(--text-dim)">剩 {{ loan.days_to_due - 1 }} 天</span>
                         </div>
                         <span v-if="!loan.due_date" style="color:var(--text-dim)">—</span>
                       </td>
@@ -2109,28 +2330,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-      const gaugeCenterTextPlugin = {
-        id: "gaugeCenterText",
-        afterDraw(chart) {
-          if (chart.config.type !== "doughnut") return;
-          if (!chart.config.options.plugins.centerText) return;
-          const { ctx } = chart;
-          const meta = chart.getDatasetMeta(0);
-          if (!meta || !meta.data || !meta.data.length) return;
-          const x = meta.data[0].x;
-          const y = meta.data[0].y + 20;
-          const text = chart.config.options.plugins.centerText.text || "-";
-          ctx.save();
-          ctx.fillStyle = "#e8f2ff";
-          ctx.font = "700 24px 'Segoe UI'";
-          ctx.textAlign = "center";
-          ctx.fillText(text, x, y);
-          ctx.restore();
-        },
-      };
-      Chart.register(gaugeCenterTextPlugin);
-
-      const { createApp, nextTick } = Vue;
+const { createApp, nextTick } = Vue;
       createApp({
         data() {
           const currentYear = new Date().getFullYear();
@@ -2159,7 +2359,6 @@
             charts: {
               assetType: null,
               sector: null,
-              gauge: null,
             },
             showAddTxModal: false,
             showAddDividendModal: false,
@@ -2287,9 +2486,7 @@
               note: "",
             },
             loanFilter: {
-              lender: "",
-              date_from: "",
-              date_to: "",
+              collateral: "",
             },
             loanSort: { col: "collateral", dir: "asc" },
             priceAutoRefreshTimer: null,
@@ -2519,15 +2716,21 @@
             }
             return Array.from(ids).sort((a, b) => a.localeCompare(b));
           },
+          loanCollateralOptions() {
+            const map = new Map();
+            for (const loan of this.loansList.items || []) {
+              if (loan.collateral && !map.has(loan.collateral)) {
+                map.set(loan.collateral, loan.collateral_name || "");
+              }
+            }
+            return [...map.entries()]
+              .map(([code, name]) => ({ code, name }))
+              .sort((a, b) => a.code.localeCompare(b.code));
+          },
           filteredLoans() {
             let items = [...(this.loansList.items || [])];
-            if (this.loanFilter.lender || this.loanFilter.date_from || this.loanFilter.date_to) {
-              items = items.filter(loan => {
-                if (this.loanFilter.lender && !loan.lender.includes(this.loanFilter.lender)) return false;
-                if (this.loanFilter.date_from && loan.start_date < this.loanFilter.date_from) return false;
-                if (this.loanFilter.date_to && loan.start_date > this.loanFilter.date_to) return false;
-                return true;
-              });
+            if (this.loanFilter.collateral) {
+              items = items.filter(loan => loan.collateral === this.loanFilter.collateral);
             }
             const { col, dir } = this.loanSort;
             const sign = dir === "asc" ? 1 : -1;
@@ -2740,6 +2943,78 @@
               this.stockQuoteLoading = false;
               this.estimateFee();
             }
+          },
+          exportCsv(rows, filename) {
+            if (!rows || !rows.length) { this.showToast("沒有資料可匯出", "error"); return; }
+            const escape = v => {
+              if (v === null || v === undefined) return "";
+              const s = String(v);
+              return s.includes(",") || s.includes('"') || s.includes("\n")
+                ? '"' + s.replace(/"/g, '""') + '"'
+                : s;
+            };
+            const headers = Object.keys(rows[0]);
+            const csv = [
+              headers.join(","),
+              ...rows.map(r => headers.map(h => escape(r[h])).join(",")),
+            ].join("\r\n");
+            const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = filename; a.click();
+            URL.revokeObjectURL(url);
+            this.showToast(`已匯出 ${rows.length} 筆 → ${filename}`, "success", 2500);
+          },
+          exportPerformanceCsv() {
+            const today = new Date().toISOString().slice(0, 10);
+            const rows = (this.filteredPerformanceItems || []).map(r => ({
+              代號: r.stock_id,
+              中文名稱: r.chinese_name,
+              市價: r.current_price,
+              每股成本: r.avg_cost_per_share,
+              股數: r.shares,
+              市值: r.market_value,
+              未實現損益: r.unrealized_profit,
+              已實現淨利: r.realized_profit,
+              已領股息: r.dividends_received,
+              累計淨損益: r.total_profit_including_dividends,
+            }));
+            this.exportCsv(rows, `彙總_${today}.csv`);
+          },
+          exportTransactionsCsv() {
+            const today = new Date().toISOString().slice(0, 10);
+            const rows = (this.filteredTransactions || []).map(tx => ({
+              日期: tx.date,
+              代號: tx.stock_id,
+              中文名稱: tx.chinese_name,
+              動作: tx.action,
+              股數: tx.shares,
+              單價: tx.price,
+              手續費: tx.fees,
+              交易稅: tx.transaction_tax,
+              已實現損益: tx.realized_profit,
+              未實現損益: tx.unrealized_profit_tx ?? "",
+              報酬率pct: tx.return_rate_tx ?? "",
+              交易後庫存: tx.inventory_after,
+            }));
+            this.exportCsv(rows, `交易明細_${today}.csv`);
+          },
+          exportLoansCsv() {
+            const today = new Date().toISOString().slice(0, 10);
+            const rows = (this.filteredLoans || []).map(l => ({
+              金融機構: l.lender,
+              擔保品代號: l.collateral,
+              擔保品名稱: l.collateral_name,
+              抵押張數: l.collateral_lots,
+              借款本金: l.principal,
+              年利率pct: +(l.interest_rate * 100).toFixed(4),
+              起息日: l.start_date,
+              到期日: l.due_date,
+              應繳利息: l.accrued_interest,
+              維持率pct: l.maintenance_rate ?? "",
+              實拿金額: l.net_proceeds,
+            }));
+            this.exportCsv(rows, `借貸明細_${today}.csv`);
           },
           fmt(v) {
             const num = Number(v || 0);
@@ -3247,7 +3522,6 @@
           renderCharts() {
             this.renderAssetTypeChart();
             this.renderSectorChart();
-            this.renderGaugeChart();
           },
           destroyChart(name) {
             if (this.charts[name]) {
@@ -3303,46 +3577,6 @@
                 maintainAspectRatio: false,
                 plugins: {
                   legend: { labels: { color: "#dce9fb" } },
-                },
-              },
-            });
-          },
-          renderGaugeChart() {
-            this.destroyChart("gauge");
-            const el = document.getElementById("gaugeChart");
-            if (!el) return;
-            const v = Math.max(0, Math.min(this.loans.maintenance_rate || 0, 260));
-            const remain = Math.max(260 - v, 0);
-            this.charts.gauge = new Chart(el, {
-              type: "doughnut",
-              data: {
-                labels: ["危險", "警戒", "安全", "剩餘"],
-                datasets: [
-                  {
-                    data: [130, 36, 94, remain],
-                    backgroundColor: ["#ff6b6b", "#ffc857", "#1fd18a", "rgba(157,176,201,0.12)"],
-                    borderWidth: 0,
-                    circumference: 180,
-                    rotation: 270,
-                    cutout: "72%",
-                  },
-                  {
-                    data: [v, Math.max(260 - v, 0)],
-                    backgroundColor: ["#e8f2ff", "rgba(0,0,0,0)"],
-                    borderWidth: 0,
-                    circumference: 180,
-                    rotation: 270,
-                    cutout: "88%",
-                  },
-                ],
-              },
-              options: {
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: { display: false },
-                  centerText: {
-                    text: `${(this.loans.maintenance_rate || 0).toFixed(1)}%`,
-                  },
                 },
               },
             });
@@ -3467,9 +3701,8 @@
           clearTxFilter() {
             this.txFilter = { stock_id: "", date_from: "", date_to: "", only_active_holdings: false };
           },
-          applyLoanFilter() {},
           clearLoanFilter() {
-            this.loanFilter = { lender: "", date_from: "", date_to: "" };
+            this.loanFilter = { collateral: "" };
           },
           toggleLoanSort(col) {
             if (this.loanSort.col === col) {
@@ -3482,13 +3715,20 @@
             if (this.loanSort.col !== col) return "⇅";
             return this.loanSort.dir === "asc" ? "↑" : "↓";
           },
+          lastRepayDate(dueDateStr) {
+            if (!dueDateStr) return null;
+            const d = new Date(dueDateStr + "T00:00:00");
+            d.setDate(d.getDate() - 1);
+            return d.toISOString().slice(0, 10);
+          },
           loanRowClass(loan) {
             const d = loan.days_to_due;
             if (d === null || d === undefined) return "";
-            if (d < 0) return "loan-overdue";
-            if (d < 30) return "loan-danger";
-            if (d < 60) return "loan-warn";
-            if (d < 90) return "loan-caution";
+            const dAdj = d - 1;
+            if (dAdj < 0) return "loan-overdue";
+            if (dAdj < 30) return "loan-danger";
+            if (dAdj < 60) return "loan-warn";
+            if (dAdj < 90) return "loan-caution";
             return "";
           },
           localDateStr(d) {
