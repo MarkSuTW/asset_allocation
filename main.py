@@ -780,11 +780,10 @@ def start_web_redeploy(request: Request, token: Optional[str] = None) -> Dict[st
     ])
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        stderr = (proc.stderr or "").strip()
-        raise HTTPException(
-            status_code=500,
-            detail=f"failed to start redeploy job: {stderr or 'systemd-run failed'}",
-        )
+        out = (proc.stdout or "").strip()
+        err = (proc.stderr or "").strip()
+        detail = err or out or f"systemd-run exited {proc.returncode}"
+        raise HTTPException(status_code=500, detail=f"failed to start redeploy job: {detail}")
 
     return {
         "message": "redeploy job started",
