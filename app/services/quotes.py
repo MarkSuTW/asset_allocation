@@ -4,6 +4,7 @@ Market price fetching from Yahoo Finance, TWSE, and Stooq.
 import json
 import ssl
 import sqlite3
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -400,7 +401,9 @@ def refresh_market_prices(
 
     updated = 0
     items: List[Dict[str, Any]] = []
-    for sid in resolved_stock_ids:
+    for i, sid in enumerate(resolved_stock_ids):
+        if i > 0:
+            time.sleep(0.3)  # avoid TWSE rate limiting on bulk requests
         quote = fetch_latest_quote(sid)
         close_price = parse_quote_price(quote.get("close_price"))
         source = str(quote.get("source") or "unknown")
