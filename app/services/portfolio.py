@@ -478,16 +478,35 @@ def portfolio_performance_data(conn: sqlite3.Connection) -> Dict[str, Any]:
             }
         )
 
+    # Totals for realized P&L and dividends must include ALL stocks ever traded,
+    # not just current holdings — otherwise sold-out positions are silently excluded.
+    all_realized = float(conn.execute(
+        "SELECT COALESCE(SUM(realized_profit), 0) AS v FROM transactions"
+    ).fetchone()["v"])
+
+    nhi = get_nhi_settings(conn)
+    all_div_rows = conn.execute("SELECT cash_amount FROM cash_dividends").fetchall()
+    all_dividends = round(sum(
+        compute_net_cash_dividend(float(r["cash_amount"] or 0), nhi["rate"], nhi["threshold"])
+        for r in all_div_rows
+    ), 2)
+    all_bonus_shares = float(conn.execute(
+        "SELECT COALESCE(SUM(bonus_shares), 0) AS v FROM stock_dividends"
+    ).fetchone()["v"])
+
     return {
         "items": items,
         "totals": {
-            "realized_profit": round(sum(i["realized_profit"] for i in items), 2),
-            "realized_with_dividends": round(sum(i["realized_with_dividends"] for i in items), 2),
-            "dividends_received": round(sum(i["dividends_received"] for i in items), 2),
-            "bonus_shares_received": round(sum(i["bonus_shares_received"] for i in items), 4),
+            "realized_profit": round(all_realized, 2),
+            "realized_with_dividends": round(all_realized + all_dividends, 2),
+            "dividends_received": all_dividends,
+            "bonus_shares_received": round(all_bonus_shares, 4),
+            # market_value and unrealized are current-holdings-only (correct)
             "market_value": round(sum(i["market_value"] for i in items), 2),
             "unrealized_profit": round(sum(i["unrealized_profit"] for i in items), 2),
-            "total_profit_including_dividends": round(sum(i["total_profit_including_dividends"] for i in items), 2),
+            "total_profit_including_dividends": round(
+                all_realized + all_dividends + sum(i["unrealized_profit"] for i in items), 2
+            ),
         },
     }
 
