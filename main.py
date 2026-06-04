@@ -135,8 +135,10 @@ def _get_git_short_hash() -> str:
         return subprocess.check_output(
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=str(APP_DIR),
+            stdin=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             text=True,
+            timeout=5,
         ).strip()
     except Exception:
         return "unknown"

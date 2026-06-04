@@ -3694,7 +3694,10 @@ const { createApp, nextTick } = Vue;
                   this.redeployPollFailures = 0;
                 } catch (err) {
                   this.redeployPollFailures += 1;
-                  if (this.redeployPollFailures >= 8) {
+                  const waited = this.redeployPollFailures * 3;
+                  if (this.redeployPollFailures < 20) {
+                    this.redeployMessage = `服務重啟中，請稍候... (${waited}s)`;
+                  } else {
                     this.redeployLoading = false;
                     this.stopRedeployPolling();
                     this.redeployMessage = `無法確認重新部署狀態：${err.message || err}`;
