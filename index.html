@@ -242,6 +242,35 @@
         50% { opacity: 0.3; }
       }
 
+      /* Price refresh job progress bar */
+      .price-job-bar {
+        padding: 4px 20px 6px;
+        background: rgba(0,0,0,0.18);
+      }
+      .price-job-track {
+        height: 4px;
+        background: rgba(255,255,255,0.12);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-bottom: 4px;
+      }
+      .price-job-fill {
+        height: 100%;
+        background: var(--accent, #6ca0e8);
+        border-radius: 2px;
+        transition: width 0.4s ease;
+      }
+      .price-job-label {
+        font-size: 0.7rem;
+        color: rgba(255,255,255,0.6);
+        display: flex;
+        align-items: center;
+      }
+      .price-job-ticker {
+        font-family: monospace;
+        color: rgba(255,255,255,0.45);
+      }
+
       .source-badge {
         display: inline-flex;
         align-items: center;
@@ -1153,7 +1182,7 @@
       <div class="app-header">
         <div class="app-title-block">
           <h3>有價證券資產儀表板</h3>
-          <div class="app-subtitle">Securities Portfolio Dashboard</div>
+          <div class="app-subtitle">Securities Portfolio Dashboard<span v-if="appVersion" style="font-family:monospace;font-size:0.6rem;opacity:0.5;margin-left:6px">#{{ appVersion }}</span></div>
         </div>
         <div class="header-controls">
           <span class="status-pill">
@@ -1172,6 +1201,19 @@
           <button class="btn btn-outline-light btn-sm" @click="refreshAll" :disabled="isRefreshing">
             {{ isRefreshing ? '更新中...' : '↺ 重新整理' }}
           </button>
+        </div>
+      </div>
+
+      <!-- Price refresh job progress bar -->
+      <div v-if="priceRefreshJob && priceRefreshJob.status !== 'completed'" class="price-job-bar">
+        <div class="price-job-track">
+          <div class="price-job-fill" :style="{ width: (priceRefreshJob.progress_pct || 0) + '%' }"></div>
+        </div>
+        <div class="price-job-label">
+          <span>📈 更新報價&nbsp;</span>
+          <span>{{ priceRefreshJob.processed || 0 }}&nbsp;/&nbsp;{{ priceRefreshJob.total_stocks || '?' }}&nbsp;檔</span>
+          <span>&nbsp;({{ priceRefreshJob.progress_pct || 0 }}%)</span>
+          <span v-if="priceRefreshJob.current_stock_id" class="price-job-ticker">&nbsp;· {{ priceRefreshJob.current_stock_id }}</span>
         </div>
       </div>
 
@@ -2816,6 +2858,8 @@ const { createApp, nextTick } = Vue;
             priceAutoRefreshTimer: null,
             priceAutoRefreshActive: false,
             priceRefreshing: false,
+            priceRefreshJob: null,
+            appVersion: "",
             showLoanModal: false,
             loanModalMode: "add",
             showDeleteLoanConfirm: false,
@@ -4405,19 +4449,42 @@ const { createApp, nextTick } = Vue;
           async manualRefreshPrices() {
             if (this.priceRefreshing) return;
             this.priceRefreshing = true;
+            this.priceRefreshJob = null;
             try {
-              const r = await this.fetchJson("/api/stock/refresh-prices?scope=holdings&limit=500", { method: "POST" });
+              const r = await this.fetchJson("/api/stock/refresh-prices/job?scope=holdings&limit=500", { method: "POST" });
+              const jobId = r.job_id;
+              // Poll job progress until done
+              const finalJob = await new Promise((resolve) => {
+                const poll = async () => {
+                  try {
+                    const state = await this.fetchJson(`/api/stock/refresh-jobs/${jobId}`);
+                    this.priceRefreshJob = state;
+                    if (state.status === "completed" || state.status === "failed") {
+                      resolve(state);
+                    } else {
+                      setTimeout(poll, 800);
+                    }
+                  } catch (_) { resolve(null); }
+                };
+                setTimeout(poll, 400);
+              });
               await Promise.all([
                 this.fetchJson("/api/portfolio/summary").then(d => { this.summary = d; }),
                 this.fetchJson("/api/portfolio/performance").then(d => { this.performance = d; }),
                 this.fetchJson("/api/portfolio/allocation").then(d => { this.allocation = d; }),
                 this.fetchJson("/api/loans/health").then(d => { this.loans = d; }),
               ]);
-              this.showToast(`報價已更新：${r.updated || 0} 檔`, "success", 2500);
+              const updated = finalJob?.updated ?? 0;
+              const failed = finalJob?.failed ?? 0;
+              const msg = failed > 0
+                ? `報價已更新：${updated} 檔（${failed} 檔失敗）`
+                : `報價已更新：${updated} 檔`;
+              this.showToast(msg, "success", 2500);
             } catch (err) {
               this.showToast(`更新報價失敗: ${err.message || err}`, "error");
             } finally {
               this.priceRefreshing = false;
+              setTimeout(() => { this.priceRefreshJob = null; }, 3000);
             }
           },
           startPriceAutoRefresh() {
@@ -4491,6 +4558,7 @@ const { createApp, nextTick } = Vue;
         mounted() {
           this.refreshAll();
           this.startPriceAutoRefresh();
+          this.fetchJson("/api/system/version").then(v => { this.appVersion = v.git_commit || ""; }).catch(() => {});
         },
         beforeUnmount() {
           this.stopDividendRecalcPolling();

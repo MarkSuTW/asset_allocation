@@ -127,6 +127,21 @@ _LOCAL_STOCK_NAME_MAP: Optional[Dict[str, str]] = None
 _AUTO_STOCK_INFO_REPAIR_DONE = False
 _DIVIDEND_RECALC_JOBS: Dict[str, Dict[str, Any]] = {}
 _DIVIDEND_RECALC_JOBS_LOCK = threading.Lock()
+_PRICE_REFRESH_JOBS: Dict[str, Dict[str, Any]] = {}
+_PRICE_REFRESH_JOBS_LOCK = threading.Lock()
+
+def _get_git_short_hash() -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(APP_DIR),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        return "unknown"
+
+APP_GIT_HASH = _get_git_short_hash()
 _WEB_REDEPLOY_ENABLED = os.getenv("WEB_REDEPLOY_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 _WEB_REDEPLOY_TOKEN = os.getenv("WEB_REDEPLOY_TOKEN", "").strip()
 _WEB_REDEPLOY_UNIT = os.getenv("WEB_REDEPLOY_UNIT", "wealth-app-redeploy").strip() or "wealth-app-redeploy"
@@ -685,6 +700,7 @@ def get_system_version() -> Dict[str, Any]:
         "system_name": "Family Office Asset Allocation Platform",
         "profile": "financial-enterprise-v2",
         "api_version": app.version,
+        "git_commit": APP_GIT_HASH,
         "server_date": date.today().isoformat(),
         "features": [
             "fifo_costing",
@@ -1621,6 +1637,127 @@ def refresh_prices_api(request: Request, limit: int = 500, scope: str = "transac
         "message": "price refresh completed",
         **result,
     }
+
+
+def _run_price_refresh_job(job_id: str, limit: int, scope: str, stock_ids: List[str]) -> None:
+    """Background worker: fetch quotes one by one and update job progress."""
+    def _set(update: Dict[str, Any]) -> None:
+        with _PRICE_REFRESH_JOBS_LOCK:
+            _PRICE_REFRESH_JOBS[job_id].update(update)
+
+    try:
+        with get_conn() as conn:
+            if stock_ids:
+                resolved = stock_ids
+            elif scope == "holdings":
+                rows = conn.execute(
+                    "SELECT DISTINCT stock_id FROM holdings WHERE COALESCE(shares,0)>0 ORDER BY stock_id LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                resolved = [normalize_stock_id(r["stock_id"]) for r in rows if normalize_stock_id(r["stock_id"])]
+            else:
+                rows = conn.execute(
+                    "SELECT DISTINCT stock_id FROM transactions ORDER BY stock_id LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                resolved = [normalize_stock_id(r["stock_id"]) for r in rows if normalize_stock_id(r["stock_id"])]
+
+        total = len(resolved)
+        _set({
+            "status": "running",
+            "total_stocks": total,
+            "processed": 0,
+            "updated": 0,
+            "failed": 0,
+            "current_stock_id": "",
+            "progress_pct": 0.0,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+        })
+
+        updated_count = 0
+        failed_count = 0
+        for i, sid in enumerate(resolved):
+            _set({
+                "current_stock_id": sid,
+                "processed": i,
+                "progress_pct": round(i / total * 100, 1) if total else 100.0,
+            })
+            quote = fetch_latest_quote(sid)
+            close_price = parse_quote_price(quote.get("close_price"))
+            if close_price is not None and close_price > 0:
+                with get_conn() as conn:
+                    upsert_stock_quote(conn, sid, quote.get("chinese_name"), float(close_price))
+                    conn.commit()
+                updated_count += 1
+            else:
+                failed_count += 1
+
+        _set({
+            "status": "completed",
+            "processed": total,
+            "updated": updated_count,
+            "failed": failed_count,
+            "current_stock_id": "",
+            "progress_pct": 100.0,
+            "completed_at": datetime.now().isoformat(timespec="seconds"),
+        })
+    except Exception as exc:
+        _set({
+            "status": "failed",
+            "error": str(exc),
+            "completed_at": datetime.now().isoformat(timespec="seconds"),
+        })
+
+
+@app.post("/api/stock/refresh-prices/job")
+@_limiter.limit("10/minute")
+def create_price_refresh_job(
+    request: Request,
+    limit: int = 500,
+    scope: str = "holdings",
+    stock_ids: Optional[str] = None,
+) -> Dict[str, Any]:
+    with _PRICE_REFRESH_JOBS_LOCK:
+        for job in _PRICE_REFRESH_JOBS.values():
+            if job.get("status") in {"queued", "running"}:
+                raise HTTPException(status_code=409, detail="已有更新報價作業執行中，請稍候")
+
+    explicit_ids = [normalize_stock_id(p) for p in (stock_ids or "").split(",") if normalize_stock_id(p)]
+    safe_limit = max(1, min(int(limit), 5000))
+    job_id = uuid.uuid4().hex
+    created_at = datetime.now().isoformat(timespec="seconds")
+
+    with _PRICE_REFRESH_JOBS_LOCK:
+        _PRICE_REFRESH_JOBS[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "scope": "explicit" if explicit_ids else scope,
+            "limit": safe_limit,
+            "created_at": created_at,
+            "total_stocks": 0,
+            "processed": 0,
+            "updated": 0,
+            "failed": 0,
+            "progress_pct": 0.0,
+            "current_stock_id": "",
+        }
+
+    threading.Thread(
+        target=_run_price_refresh_job,
+        args=(job_id, safe_limit, scope, explicit_ids),
+        daemon=True,
+    ).start()
+
+    return {"job_id": job_id, "status": "queued", "created_at": created_at}
+
+
+@app.get("/api/stock/refresh-jobs/{job_id}")
+def get_price_refresh_job(job_id: str) -> Dict[str, Any]:
+    with _PRICE_REFRESH_JOBS_LOCK:
+        job = _PRICE_REFRESH_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="找不到指定的更新作業")
+    return job
 
 
 @app.get("/api/stock/{stock_id}/detail")
