@@ -43,7 +43,11 @@ def fetch_twse_realtime_quote(stock_id: str) -> Dict[str, Any]:
     for code in code_candidates:
         ex_list = [f"tse_{code}.tw", f"otc_{code}.tw"]
         url = "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?json=1&delay=0&ex_ch=" + urllib.parse.quote("|".join(ex_list))
-        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Referer": "https://mis.twse.com.tw/stock/index.jsp",
+        })
         try:
             with urllib.request.urlopen(req, timeout=8, context=ssl._create_unverified_context()) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))

@@ -208,7 +208,7 @@ python backup_to_gdrive.py
 | PUT    | `/api/settings/dividend-nhi`          | 更新補充健保設定                               |
 | POST   | `/api/system/backup-db`               | 建立本機備份（`?offsite=true` 同時上傳 Drive） |
 | POST   | `/api/system/redeploy/start`          | 啟動網頁一鍵重部署（需 `X-Deploy-Token`）      |
-| GET    | `/api/system/redeploy/status`         | 查詢重部署工作狀態與最近 log                    |
+| GET    | `/api/system/redeploy/status`         | 查詢重部署工作狀態與最近 log                   |
 | GET    | `/api/system/audit-logs`              | 系統稽核日誌                                   |
 | GET    | `/api/system/data-health`             | 資料健康報告                                   |
 | POST   | `/api/ai/advisor`                     | AI 投資顧問                                    |

@@ -1,7 +1,9 @@
 """
 Unit tests for pure business logic functions (no DB or HTTP needed).
 """
+import json
 import pytest
+from unittest.mock import MagicMock, patch
 
 
 # ---------------------------------------------------------------------------
@@ -200,3 +202,70 @@ class TestTaiwanTradingTime:
 
     def test_opening_time_exact(self):
         assert self._check(0, 9, 0) is True
+
+
+# ---------------------------------------------------------------------------
+# fetch_twse_realtime_quote — header and parse behaviour
+# ---------------------------------------------------------------------------
+
+from app.services.quotes import fetch_twse_realtime_quote
+
+
+def _make_mis_response(z: str, y: str, name: str = "中信金") -> bytes:
+    """Build a minimal TWSE MIS JSON payload."""
+    payload = {"msgArray": [{"z": z, "y": y, "n": name}]}
+    return json.dumps(payload).encode("utf-8")
+
+
+def _mock_urlopen(response_body: bytes):
+    """Return a context-manager mock that yields a readable response."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = response_body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    return mock_resp
+
+
+class TestFetchTwseRealtimeQuote:
+    def test_sends_referer_header(self):
+        """Request to TWSE MIS must include Referer so it isn't rejected."""
+        captured = {}
+
+        def fake_urlopen(req, timeout=None, context=None):
+            captured["headers"] = dict(req.headers)
+            return _mock_urlopen(_make_mis_response("70.5", "69.0"))
+
+        with patch("app.services.quotes.urllib.request.urlopen", side_effect=fake_urlopen):
+            fetch_twse_realtime_quote("2891")
+
+        assert "Referer" in captured["headers"], "Referer header missing from TWSE MIS request"
+        assert "mis.twse.com.tw" in captured["headers"]["Referer"]
+
+    def test_returns_realtime_z_price_during_trading(self):
+        """When z field has a price (盤中), it should be returned as-is."""
+        with patch("app.services.quotes.urllib.request.urlopen",
+                   return_value=_mock_urlopen(_make_mis_response("72.3", "70.5"))):
+            result = fetch_twse_realtime_quote("2891")
+
+        assert result["close_price"] == pytest.approx(72.3)
+        assert result["source"] == "twse_realtime"
+        assert result["chinese_name"] == "中信金"
+
+    def test_falls_back_to_y_when_z_is_dash(self):
+        """After hours z='-'; should fall back to yesterday-close field y."""
+        with patch("app.services.quotes.urllib.request.urlopen",
+                   return_value=_mock_urlopen(_make_mis_response("-", "70.5"))):
+            result = fetch_twse_realtime_quote("2891")
+
+        assert result["close_price"] == pytest.approx(70.5)
+        assert result["source"] == "twse_realtime"
+
+    def test_returns_unavailable_when_network_fails(self):
+        """On network error the function must not raise; returns None price."""
+        import urllib.error
+        with patch("app.services.quotes.urllib.request.urlopen",
+                   side_effect=urllib.error.URLError("timeout")):
+            result = fetch_twse_realtime_quote("2891")
+
+        assert result["close_price"] is None
+        assert "unavailable" in result["source"]
