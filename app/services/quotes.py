@@ -217,14 +217,7 @@ def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
             chinese_name = twse_rt.get("chinese_name")
             source = str(twse_rt.get("source") or "twse_realtime")
 
-    # --- TWSE rwd daily data (after-hours official data for TW stocks, before Yahoo fallbacks) ---
-    if close_price is None and is_tw:
-        twse_p = _fetch_twse_openapi(code_candidates)
-        if twse_p is not None:
-            close_price = float(twse_p)
-            source = "twse_openapi"
-
-    # --- Yahoo Finance v7 (may 401, try anyway; useful for non-TW stocks) ---
+    # --- Yahoo Finance v7: real-time regularMarketPrice (works even when MIS is blocked) ---
     if close_price is None:
         yp, yn = _fetch_yahoo_v7(symbols)
         if yp is not None:
@@ -232,20 +225,27 @@ def fetch_latest_quote(stock_id: str) -> Dict[str, Any]:
             chinese_name = chinese_name or yn
             source = "yahoo_quote"
 
-    # --- Yahoo Finance v8 chart (historical fallback) ---
+    # --- Yahoo Finance v8 chart ---
     if close_price is None:
         yp8 = _fetch_yahoo_v8_chart(symbols)
         if yp8 is not None:
             close_price = float(yp8)
             source = "yahoo_chart"
 
-    # --- Stooq CSV (last resort) ---
+    # --- Stooq CSV ---
     if close_price is None:
         stooq = fetch_stooq_quote(sid)
         if stooq.get("close_price") is not None:
             close_price = float(stooq["close_price"])
             chinese_name = chinese_name or stooq.get("chinese_name")
             source = str(stooq.get("source") or "stooq_csv")
+
+    # --- TWSE after-trading daily data (yesterday's close, last resort) ---
+    if close_price is None and is_tw:
+        twse_p = _fetch_twse_openapi(code_candidates)
+        if twse_p is not None:
+            close_price = float(twse_p)
+            source = "twse_openapi"
 
     if not chinese_name:
         chinese_name = get_local_stock_name(sid)
