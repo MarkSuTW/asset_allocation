@@ -56,9 +56,9 @@ def fetch_twse_realtime_quote(stock_id: str) -> Dict[str, Any]:
 
         msg_arr = payload.get("msgArray", []) if isinstance(payload, dict) else []
         for row in msg_arr:
+            # Only use z (current intraday price). y is yesterday's close —
+            # skip it here so the caller falls through to Yahoo Finance instead.
             price = parse_market_price_token(row.get("z"))
-            if price is None:
-                price = parse_market_price_token(row.get("y"))
             if price is None:
                 continue
             return {

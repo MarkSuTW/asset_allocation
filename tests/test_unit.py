@@ -251,14 +251,14 @@ class TestFetchTwseRealtimeQuote:
         assert result["source"] == "twse_realtime"
         assert result["chinese_name"] == "中信金"
 
-    def test_falls_back_to_y_when_z_is_dash(self):
-        """After hours z='-'; should fall back to yesterday-close field y."""
+    def test_returns_none_when_z_is_dash(self):
+        """z='-' means no intraday trade yet; return None so Yahoo Finance is tried next."""
         with patch("app.services.quotes.urllib.request.urlopen",
                    return_value=_mock_urlopen(_make_mis_response("-", "70.5"))):
             result = fetch_twse_realtime_quote("2891")
 
-        assert result["close_price"] == pytest.approx(70.5)
-        assert result["source"] == "twse_realtime"
+        assert result["close_price"] is None
+        assert "unavailable" in result["source"]
 
     def test_returns_unavailable_when_network_fails(self):
         """On network error the function must not raise; returns None price."""
